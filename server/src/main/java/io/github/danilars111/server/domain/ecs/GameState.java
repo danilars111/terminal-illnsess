@@ -1,6 +1,6 @@
 package io.github.danilars111.server.domain.ecs;
 
-import io.github.danilars111.server.domain.ecs.interfaces.Component;
+import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 
 import java.lang.System.Logger;
