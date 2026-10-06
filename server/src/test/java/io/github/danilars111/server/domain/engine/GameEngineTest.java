@@ -24,6 +24,42 @@ public class GameEngineTest {
     }
 
     @Test
+    @DisplayName("Executes registered systems sequentially on tick")
+    void executesSystemsOnTick() {
+        List<String> executionOrder = new ArrayList<>();
+
+        engine.registerSystem((state, tick) -> executionOrder.add("system1_tick_" + tick));
+        engine.registerSystem((state, tick) -> executionOrder.add("system2_tick_" + tick));
+        engine.registerSystem((state, tick) -> executionOrder.add("system3_tick_" + tick));
+
+        engine.tick();
+        assertEquals(List.of("system1_tick_1", "system2_tick_1", "system3_tick_1"), executionOrder);
+    }
+
+    @Test
+    @DisplayName("Does not execute systems when paused")
+    void doesNotExecuteSystemsWhenPaused() {
+        List<String> executionOrder = new ArrayList<>();
+        engine.registerSystem((state, tick) -> executionOrder.add("system"));
+
+        engine.pause();
+        engine.tick();
+        assertTrue(executionOrder.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Provides access to its underlying GameState")
+    void providesAccessToGameState() {
+        assertNotNull(engine.getGameState());
+    }
+
+    @Test
+    @DisplayName("Registering null system throws NullPointerException")
+    void rejectsNullSystem() {
+        assertThrows(NullPointerException.class, () -> engine.registerSystem(null));
+    }
+
+    @Test
     @DisplayName("Publishes TickEvent with current tick number after advancing")
     void publishesTickEventOnTick() {
         List<TickEvent> publishedEvents = new ArrayList<>();
