@@ -1,6 +1,8 @@
 package io.github.danilars111.server.domain.engine;
 
 import io.github.danilars111.contracts.command.GameCommand;
+import io.github.danilars111.contracts.event.TickEvent;
+import io.github.danilars111.server.domain.port.out.interfaces.GameStatePublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,36 @@ public class GameEngineTest {
     @BeforeEach
     void setUp() {
         engine = new GameEngine();
+    }
+
+    @Test
+    @DisplayName("Publishes TickEvent with current tick number after advancing")
+    void publishesTickEventOnTick() {
+        List<TickEvent> publishedEvents = new ArrayList<>();
+        GameStatePublisher publisher = publishedEvents::add;
+        engine.setPublisher(publisher);
+
+        engine.tick();
+        assertEquals(List.of(new TickEvent(1)), publishedEvents);
+        engine.tick();
+        assertEquals(List.of(new TickEvent(1), new TickEvent(2)), publishedEvents);
+    }
+
+    @Test
+    @DisplayName("Does not publish TickEvent when paused")
+    void doesNotPublishTickEventWhenPaused() {
+        List<TickEvent> publishedEvents = new ArrayList<>();
+        GameStatePublisher publisher = publishedEvents::add;
+        engine.setPublisher(publisher);
+        engine.pause();
+        engine.tick();
+        assertTrue(publishedEvents.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Setting Null publisher throws NullPointerException")
+    void rejectsNullPublisher() {
+        assertThrows(NullPointerException.class, () -> engine.setPublisher(null));
     }
 
     @Test
