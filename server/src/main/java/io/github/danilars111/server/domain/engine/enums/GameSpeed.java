@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.engine;
+package io.github.danilars111.server.domain.engine.enums;
 
 public enum GameSpeed {
     SPEED_1,

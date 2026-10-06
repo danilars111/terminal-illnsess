@@ -2,6 +2,7 @@ package io.github.danilars111.server.domain.engine;
 
 import io.github.danilars111.contracts.command.interfaces.GameCommand;
 import io.github.danilars111.contracts.event.TickEvent;
+import io.github.danilars111.server.domain.engine.enums.GameSpeed;
 import io.github.danilars111.server.domain.port.out.interfaces.GameStatePublisher;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
