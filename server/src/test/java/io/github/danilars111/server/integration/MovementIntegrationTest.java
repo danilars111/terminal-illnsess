@@ -3,6 +3,7 @@ package io.github.danilars111.server.integration;
 import io.github.danilars111.contracts.command.MoveCommand;
 import io.github.danilars111.server.domain.component.PositionComponent;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
 import io.github.danilars111.server.domain.system.MovementSystem;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,16 +40,16 @@ public class MovementIntegrationTest {
 
         engine.registerSystem(movementSystem);
 
+        CommandDispatcher dispatcher = new CommandDispatcher();
+        
         // Route incoming commands to appropriate systems
-        engine.setCommandHandler(command -> {
-            if(command instanceof MoveCommand(long entityId, int deltaX, int deltaY)) {
+        dispatcher.registerHandler(MoveCommand.class, moveCmd ->
                 movementSystem.requestMove(
-                        new EntityId(entityId),
-                        deltaX,
-                        deltaY
-                );
-            }
-        });
+                    new EntityId(moveCmd.entityId()),
+                    moveCmd.deltaX(),
+                    moveCmd.deltaY())
+        );
+        engine.setCommandHandler(dispatcher::dispatch);
     }
 
     @Test
