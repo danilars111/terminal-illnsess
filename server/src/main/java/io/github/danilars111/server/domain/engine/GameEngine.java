@@ -1,10 +1,10 @@
 package io.github.danilars111.server.domain.engine;
 
 import io.github.danilars111.contracts.command.GameCommand;
+import io.github.danilars111.contracts.event.TickEvent;
+import io.github.danilars111.server.domain.port.out.interfaces.GameStatePublisher;
 
 import java.util.Objects;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -15,32 +15,30 @@ public class GameEngine {
     private final AtomicBoolean paused = new AtomicBoolean(false);
     private final AtomicReference<GameSpeed> speed = new AtomicReference<>(GameSpeed.SPEED_1);
 
-    private final Queue<GameCommand> commandQueue = new ConcurrentLinkedQueue<>();
+    private final CommandQueue commandQueue = new CommandQueue();
     private Consumer<GameCommand> commandHandler = _ -> {};
+    private GameStatePublisher publisher = _ -> {};
 
     public GameEngine() {}
 
     public void tick() {
         if (!paused.get()) {
-            drainCommands();
-            currentTick.incrementAndGet();
+            commandQueue.drainAll(commandHandler);
+            long nextTick = currentTick.incrementAndGet();
+            publisher.publish(new TickEvent(nextTick));
         }
     }
 
     public void enqueueCommand(GameCommand command) {
-        Objects.requireNonNull(command, "GameCommand cannot be null");
-        commandQueue.add(command);
+        commandQueue.enqueue(command);
     }
 
     public void setCommandHandler(Consumer<GameCommand> handler) {
         commandHandler = Objects.requireNonNull(handler, "CommandHandler cannot be null");
     }
 
-    private void drainCommands() {
-        GameCommand command;
-        while ((command = commandQueue.poll()) != null) {
-            commandHandler.accept(command);
-        }
+    public void setPublisher(GameStatePublisher publisher) {
+        this.publisher = Objects.requireNonNull(publisher, "Publisher cannot be null");
     }
 
     public void pause() {
