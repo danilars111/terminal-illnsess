@@ -1,6 +1,6 @@
 package io.github.danilars111.server.domain.engine;
 
-import io.github.danilars111.contracts.command.GameCommand;
+import io.github.danilars111.contracts.command.interfaces.GameCommand;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;

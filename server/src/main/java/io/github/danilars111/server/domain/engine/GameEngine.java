@@ -1,9 +1,9 @@
 package io.github.danilars111.server.domain.engine;
 
-import io.github.danilars111.contracts.command.GameCommand;
+import io.github.danilars111.contracts.command.interfaces.GameCommand;
 import io.github.danilars111.contracts.event.TickEvent;
 import io.github.danilars111.server.domain.ecs.GameState;
-import io.github.danilars111.server.domain.ecs.interfaces.GameSystem;
+import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.port.out.interfaces.GameStatePublisher;
 
 import java.lang.System.Logger;

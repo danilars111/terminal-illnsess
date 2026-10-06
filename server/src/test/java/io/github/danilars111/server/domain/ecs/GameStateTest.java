@@ -1,13 +1,17 @@
 package io.github.danilars111.server.domain.ecs;
 
-import io.github.danilars111.server.domain.ecs.interfaces.Component;
+import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,6 +21,18 @@ public class GameStateTest {
 
     private record PositionComponent(int x, int y) implements Component {}
     private record HealthComponent(int current, int max) implements Component {}
+
+    @BeforeAll
+    static void enableLogging() {
+        Logger rootLogger = Logger.getLogger("");
+        rootLogger.setLevel(Level.SEVERE); // Enables System.Logger Level.DEBUG
+
+        for (var handler : rootLogger.getHandlers()) {
+            if (handler instanceof ConsoleHandler) {
+                handler.setLevel(Level.SEVERE);
+            }
+        }
+    }
 
     @BeforeEach
     void setUp() {

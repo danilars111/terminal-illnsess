@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.ecs.interfaces;
+package io.github.danilars111.server.domain.system.interfaces;
 
 import io.github.danilars111.server.domain.ecs.GameState;
 
