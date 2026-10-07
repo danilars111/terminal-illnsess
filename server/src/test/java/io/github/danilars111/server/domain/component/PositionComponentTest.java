@@ -1,6 +1,7 @@
 package io.github.danilars111.server.domain.component;
 
 import io.github.danilars111.server.domain.component.interfaces.Component;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

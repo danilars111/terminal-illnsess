@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.component;
+package io.github.danilars111.server.domain.component.movement;
 
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.interfaces.Component;
@@ -18,6 +18,9 @@ public record TraversalComponent(Set<TraversalMode> activeModes) implements Comp
     public static TraversalComponent of(Set<TraversalMode> modes) {
         return new TraversalComponent(modes);
     }
+
+    public static TraversalComponent empty() { return new TraversalComponent(Set.of());}
+
     public boolean hasMode(TraversalMode mode) {
         return activeModes.contains(mode);
     }

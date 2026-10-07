@@ -13,14 +13,25 @@ public class GameWorld {
     private final TileDefinition[] tiles;
 
     public GameWorld(int width, int height, TileDefinition defaultTile) {
+
+        Objects.requireNonNull(defaultTile, "DefaultTile cannot be null");
+
+        TileDefinition[] defaultTiles = new TileDefinition[width * height];
+        Arrays.fill(defaultTiles, defaultTile);
+        this(width, height, defaultTiles);
+    }
+
+    public GameWorld(int width, int height, TileDefinition[] map) {
         if(width <= 0 || height <= 0) {
             throw new IllegalArgumentException("Width and height must be greater than 0");
         }
-        Objects.requireNonNull(defaultTile, "DefaultTile cannot be null");
+        if(map.length != width * height) {
+            throw new IllegalArgumentException("Map must have the same size as width and height");
+        }
         this.width = width;
         this.height = height;
         this.tiles = new TileDefinition[width * height];
-        Arrays.fill(this.tiles, defaultTile);
+        System.arraycopy(map, 0, tiles, 0, map.length);
     }
     
     public boolean isWithinBounds(int x, int y) {
