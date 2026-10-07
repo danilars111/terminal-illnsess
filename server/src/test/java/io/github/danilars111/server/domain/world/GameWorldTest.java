@@ -54,25 +54,25 @@ public class GameWorldTest {
         world.setTile(2, 2, wall);
 
         // Ground at (0, 0)
-        assertTrue(world.canPass(0, 0, TraversalMode.WALKING));
-        assertFalse(world.canPass(0, 0, TraversalMode.SWIMMING));
+        assertTrue(world.canPass(0, 0, Set.of(TraversalMode.WALKING)));
+        assertFalse(world.canPass(0, 0, Set.of(TraversalMode.SWIMMING)));
 
         // Water at (1, 1)
-        assertFalse(world.canPass(1, 1, TraversalMode.WALKING));
-        assertTrue(world.canPass(1, 1, TraversalMode.SWIMMING));
-        assertTrue(world.canPass(1, 1, TraversalMode.FLYING));
+        assertFalse(world.canPass(1, 1, Set.of(TraversalMode.WALKING)));
+        assertTrue(world.canPass(1, 1, Set.of(TraversalMode.SWIMMING)));
+        assertTrue(world.canPass(1, 1, Set.of(TraversalMode.FLYING)));
 
         // Wall at (2, 2)
-        assertFalse(world.canPass(2, 2, TraversalMode.WALKING));
-        assertFalse(world.canPass(2, 2, TraversalMode.SWIMMING));
-        assertFalse(world.canPass(2, 2, TraversalMode.FLYING));
+        assertFalse(world.canPass(2, 2, Set.of(TraversalMode.WALKING)));
+        assertFalse(world.canPass(2, 2, Set.of(TraversalMode.SWIMMING)));
+        assertFalse(world.canPass(2, 2, Set.of(TraversalMode.FLYING)));
     }
 
     @Test
     @DisplayName("Out-of-bounds posiitons are always impassible")
     void outOfBoundsAreImpassible() {
-        assertFalse(world.canPass(-1, 0, TraversalMode.FLYING));
-        assertFalse(world.canPass(10, 10, TraversalMode.FLYING));
+        assertFalse(world.canPass(-1, 0, Set.of(TraversalMode.FLYING)));
+        assertFalse(world.canPass(10, 10, Set.of(TraversalMode.FLYING)));
     }
 
     @Test
