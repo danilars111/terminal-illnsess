@@ -5,6 +5,7 @@ import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.Set;
 
 public class GameWorld {
     private final int width;
@@ -26,11 +27,17 @@ public class GameWorld {
         return x >= 0 && x < width && y >= 0 && y < height;
     }
     
-    public boolean canPass(int x, int y, TraversalMode mode) {
+    public boolean canPass(int x, int y, Set<TraversalMode> modes) {
         if(!isWithinBounds(x, y)) {
             return false;
         }
-        return getTile(x, y).isTraversable(mode);
+        TileDefinition tile = getTile(x, y);
+        for(TraversalMode mode : modes) {
+            if(tile.isTraversable(mode)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     public TileDefinition getTile(int x, int y) {
