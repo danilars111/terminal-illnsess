@@ -36,6 +36,17 @@ public class GameWorldTest {
     }
 
     @Test
+    @DisplayName("Adding a map grid larger than height * width throws IllegalArgumentException")
+    void rejectsLargeMap() {
+        TileDefinition[] grid = new TileDefinition[]{
+                ground, ground, wall,     // y = 0
+                ground, water, wall,     // y = 1
+                ground, ground, ground  // y = 2
+        };
+        assertThrows(IllegalArgumentException.class, () -> new GameWorld(2, 2, grid));
+    }
+
+    @Test
     @DisplayName("Coordinates inside bounds return true, outside returns false")
     void checkBounds() {
         assertTrue(world.isWithinBounds(0, 0));

@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.component;
+package io.github.danilars111.server.domain.component.movement;
 
 import io.github.danilars111.server.domain.component.interfaces.Component;
 
