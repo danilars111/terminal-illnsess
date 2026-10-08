@@ -1,7 +1,10 @@
 package io.github.danilars111.server.domain.ecs;
 
+import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.interfaces.Component;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.world.indices.SpatialIndex;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -25,6 +28,20 @@ public class GameState {
     private final Set<EntityId> entities = new HashSet<>();
     private final Map<EntityId, Map<Class<? extends Component>, Component>> componentsByEntity = new HashMap<>();
 
+    private final SpatialIndex spatialIndex;
+
+    public GameState(SpatialIndex spatialIndex) {
+        this.spatialIndex = spatialIndex;
+    }
+
+    public GameState() {
+        this(new SpatialIndex());
+    }
+
+    public SpatialIndex getSpatialIndex() {
+        return spatialIndex;
+    }
+
     public EntityId createEntity() {
         EntityId id = new EntityId(nextEntityId.getAndIncrement());
         entities.add(id);
@@ -43,6 +60,20 @@ public class GameState {
         }
         entityComponents.put(component.getClass(), component);
         LOGGER.log(Level.TRACE, "Added Component {0} to Entity {1}", component.getClass(), entityId.value());
+
+        switch (component) {
+            case PositionComponent pos -> {
+                FootprintComponent footprint = (FootprintComponent) entityComponents.get(FootprintComponent.class);
+                spatialIndex.updateEntity(entityId, pos, footprint);
+            }
+            case FootprintComponent footprint -> {
+                PositionComponent pos = (PositionComponent) entityComponents.get(PositionComponent.class);
+                if (pos != null) {
+                    spatialIndex.updateEntity(entityId, pos, footprint);
+                }
+            }
+            default -> {}
+        }
     }
 
     public <T extends Component> Optional<T> getComponent(EntityId entityId, Class<T> componentClass) {
@@ -61,9 +92,18 @@ public class GameState {
         Objects.requireNonNull(componentClass, "ComponentClass cannot be null");
 
         Map<Class<? extends Component>, Component> entityComponents = componentsByEntity.get(entityId);
-        if(entityComponents != null) {
-            entityComponents.remove(componentClass);
+        if (entityComponents != null && entityComponents.remove(componentClass) != null) {
             LOGGER.log(Level.TRACE, "Removed Component {0} from Entity {1}", componentClass, entityId.value());
+
+            if (componentClass == PositionComponent.class) {
+                spatialIndex.remove(entityId);
+            } else if (componentClass == FootprintComponent.class) {
+                PositionComponent pos = (PositionComponent) entityComponents.get(PositionComponent.class);
+                if (pos != null) {
+                    // Re-register as a default 1x1 single tile at its position
+                    spatialIndex.updateEntity(entityId, pos, null);
+                }
+            }
         }
     }
 
@@ -71,6 +111,7 @@ public class GameState {
         Objects.requireNonNull(entityId, "EntityId cannot be null");
         entities.remove(entityId);
         componentsByEntity.remove(entityId);
+        spatialIndex.remove(entityId);
         LOGGER.log(Level.DEBUG, "Destroyed Entity: {0}", entityId.value());
     }
 
