@@ -6,13 +6,12 @@ import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
-import io.github.danilars111.server.domain.ecs.GameState;
+
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
 import io.github.danilars111.server.domain.system.CooldownSystem;
 import io.github.danilars111.server.domain.system.MovementSystem;
-import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.world.GameWorld;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +30,15 @@ public class MovementIntegrationTest {
     private GameEngine engine;
     private MovementSystem movementSystem;
     private CooldownSystem cooldownSystem;
+
+    private static final int WORLD_SIZE = 20;
+    private static final int BASE_COOLDOWN = 4;
+
+    private final TileDefinition grass = new TileDefinition(
+            "grass",
+            "Grass",
+            Set.of(TraversalMode.WALKING, TraversalMode.FLYING)
+    );
 
     private static final int WORLD_SIZE = 20;
     private static final int BASE_COOLDOWN = 4;
