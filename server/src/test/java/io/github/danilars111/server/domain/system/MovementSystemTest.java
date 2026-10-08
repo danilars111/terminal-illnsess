@@ -3,6 +3,8 @@ package io.github.danilars111.server.domain.system;
 import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.CooldownComponent;
+import io.github.danilars111.server.domain.component.FootprintComponent;
+import io.github.danilars111.server.domain.component.movement.ColliderComponent;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
@@ -10,6 +12,7 @@ import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 
 import io.github.danilars111.server.domain.world.GameWorld;
+import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -323,6 +326,241 @@ public class MovementSystemTest {
             trackingSystem.update(gameState, 15L);
 
             assertEquals(List.of(entityEarly, entityLate), executionOrder);
+        }
+    }
+
+    @Nested
+    @DisplayName("Footprint Movement Tests")
+    class FootprintMovementTests {
+
+        @Test
+        @DisplayName("2x2 footprint moves successfully when all destination tiles are passable")
+        void movesMultiTileFootprintSuccessfully() {
+            // Map at y=0 and y=1:
+            // (0,0) grass, (1,0) grass, (2,0) wall
+            // (0,1) grass, (1,1) water, (2,1) wall
+            // Flying entity can cross grass and water
+            EntityId flyer = createFlyingEntity(0, 0);
+            gameState.addComponent(flyer, FootprintComponent.rectangle(2, 2));
+
+            // Target pos (0, 1): covers (0,1) grass, (1,1) water, (0,2) grass, (1,2) grass
+            gameState.addComponent(flyer, new MoveIntentComponent(0, 1, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(flyer, PositionComponent.class).orElseThrow();
+            assertEquals(0, pos.getX());
+            assertEquals(1, pos.getY());
+
+            // Verify SpatialIndex holds all 4 updated coordinates
+            Set<TileCoord> footprint = gameState.getSpatialIndex().getFootprintOf(flyer);
+            assertEquals(4, footprint.size());
+            assertTrue(footprint.contains(new TileCoord(0, 1)));
+            assertTrue(footprint.contains(new TileCoord(1, 1)));
+            assertTrue(footprint.contains(new TileCoord(0, 2)));
+            assertTrue(footprint.contains(new TileCoord(1, 2)));
+        }
+
+        @Test
+        @DisplayName("Multi-tile footprint move is rejected if even a single cell hits impassable terrain")
+        void rejectsMoveIfAnyFootprintCellIsImpassable() {
+            // (0,0) grass, (1,0) grass. Target pos (1, 0) for 2x1 footprint:
+            // covers (1, 0) grass, and (2, 0) wall
+            EntityId walker = createWalkingEntity(0, 0);
+            gameState.addComponent(walker, FootprintComponent.rectangle(2, 1)); // 2 wide, 1 tall
+            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(walker, PositionComponent.class).orElseThrow();
+            assertEquals(0, pos.getX(), "Move must be aborted if trailing/leading edge hits a wall");
+            assertEquals(0, pos.getY());
+        }
+
+        @Test
+        @DisplayName("Multi-tile entity moving 1 step forward does not collide with its own trailing tiles")
+        void selfExclusionAllowsOverlappingMovement() {
+            // 2x1 footprint at (0, 0) occupies (0, 0) and (1, 0)
+            // Moving +1 X to (1, 0) occupies (1, 0) and (2, 0)
+            // (1, 0) is already occupied by this entity, but it shouldn't collide with itself
+            TileDefinition[] openRow = new TileDefinition[]{
+                    grass, grass, grass, grass
+            };
+            GameWorld linearWorld = new GameWorld(4, 1, openRow);
+            MovementSystem openMovementSystem = new MovementSystem(linearWorld, BASE_COOLDOWN, true);
+
+            EntityId walker = createWalkingEntity(0, 0);
+            gameState.addComponent(walker, FootprintComponent.rectangle(2, 1));
+            gameState.addComponent(walker, new ColliderComponent(true));
+            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L));
+
+            openMovementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(walker, PositionComponent.class).orElseThrow();
+            assertEquals(1, pos.getX(), "Entity must not block itself when shifting into its own prior footprint");
+            assertEquals(0, pos.getY());
+        }
+    }
+
+    @Nested
+    @DisplayName("Dynamic Entity Collision Tests")
+    class EntityCollisionTests {
+
+        @Test
+        @DisplayName("Entity is blocked when stepping into a tile occupied by another entity with ColliderComponent")
+        void blockedByStaticOrDynamicCollider() {
+            EntityId mover = createWalkingEntity(0, 0);
+
+            // Obstacle entity at (1, 0)
+            EntityId obstacle = gameState.createEntity();
+            gameState.addComponent(obstacle, new PositionComponent(1, 0));
+            gameState.addComponent(obstacle, new ColliderComponent(true));
+
+            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            assertEquals(0, pos.getX(), "Mover must be blocked by collider obstacle");
+            assertEquals(0, pos.getY());
+        }
+
+        @Test
+        @DisplayName("Entity can step onto a tile occupied by an entity WITHOUT a ColliderComponent")
+        void allowsSteppingOnNonColliderEntity() {
+            EntityId mover = createWalkingEntity(0, 0);
+
+            // Non-collidable entity (e.g., ground item, trigger) at (1, 0)
+            EntityId item = gameState.createEntity();
+            gameState.addComponent(item, new PositionComponent(1, 0));
+
+            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            assertEquals(1, pos.getX(), "Mover should walk through non-collidable entities");
+            assertEquals(0, pos.getY());
+        }
+
+        @Test
+        @DisplayName("Moving entity respects colliders even if the mover lacks a ColliderComponent")
+        void nonColliderMoverStillRespectsObstacleColliders() {
+            // Mover has no ColliderComponent
+            EntityId mover = createWalkingEntity(0, 0);
+
+            // Solid obstacle
+            EntityId rock = gameState.createEntity();
+            gameState.addComponent(rock, new PositionComponent(1, 0));
+            gameState.addComponent(rock, new ColliderComponent(true));
+
+            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            assertEquals(0, pos.getX(), "Unit without collider must still respect solid obstacles");
+        }
+    }
+
+    @Nested
+    @DisplayName("Dynamic Corner Pinch Tests")
+    class DynamicCornerPinchTests {
+
+        @Test
+        @DisplayName("Diagonal movement is blocked when flanked by dynamic colliders on both sides")
+        void blocksDiagonalWhenBothFlanksHaveDynamicColliders() {
+            // Flat grass map 2x2
+            TileDefinition[] allGrass = new TileDefinition[]{
+                    grass, grass,
+                    grass, grass
+            };
+            GameWorld flatWorld = new GameWorld(2, 2, allGrass);
+            MovementSystem testSystem = new MovementSystem(flatWorld, BASE_COOLDOWN, true);
+
+            // Mover at (0, 0) attempting diagonal to (1, 1)
+            EntityId mover = createWalkingEntity(0, 0);
+
+            // Dynamic colliders at both flanks: (1, 0) and (0, 1)
+            EntityId blockerA = gameState.createEntity();
+            gameState.addComponent(blockerA, new PositionComponent(1, 0));
+            gameState.addComponent(blockerA, new ColliderComponent(true));
+
+            EntityId blockerB = gameState.createEntity();
+            gameState.addComponent(blockerB, new PositionComponent(0, 1));
+            gameState.addComponent(blockerB, new ColliderComponent(true));
+
+            gameState.addComponent(mover, new MoveIntentComponent(1, 1, 10L));
+
+            testSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            assertEquals(0, pos.getX(), "Diagonal step must be blocked by two dynamic colliders");
+            assertEquals(0, pos.getY());
+        }
+    }
+
+    @Nested
+    @DisplayName("NOCLIP Mode Tests")
+    class NoClipTests {
+
+        @Test
+        @DisplayName("Entity with NOCLIP bypasses impassable static terrain (walls)")
+        void noClipBypassesImpassableTerrain() {
+            // Wall is at (2, 0)
+            EntityId cheater = gameState.createEntity();
+            gameState.addComponent(cheater, new PositionComponent(1, 0));
+            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
+            gameState.addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            assertEquals(2, pos.getX(), "NOCLIP should walk directly through static wall tiles");
+            assertEquals(0, pos.getY());
+        }
+
+        @Test
+        @DisplayName("Entity with NOCLIP bypasses dynamic entity colliders")
+        void noClipBypassesEntityColliders() {
+            EntityId cheater = gameState.createEntity();
+            gameState.addComponent(cheater, new PositionComponent(0, 0));
+            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
+
+            // Solid rock at (1, 0)
+            EntityId rock = gameState.createEntity();
+            gameState.addComponent(rock, new PositionComponent(1, 0));
+            gameState.addComponent(rock, new ColliderComponent(true));
+
+            gameState.addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
+
+            movementSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            assertEquals(1, pos.getX(), "NOCLIP should pass through solid entity colliders");
+            assertEquals(0, pos.getY());
+        }
+
+        @Test
+        @DisplayName("Entity with NOCLIP can cut diagonally through fully blocked pinch points")
+        void noClipBypassesCornerPinching() {
+            TileDefinition[] slitTiles = new TileDefinition[]{
+                    grass, wall,
+                    wall,  grass
+            };
+            GameWorld slitWorld = new GameWorld(2, 2, slitTiles);
+            MovementSystem slitSystem = new MovementSystem(slitWorld, BASE_COOLDOWN, true);
+
+            EntityId cheater = gameState.createEntity();
+            gameState.addComponent(cheater, new PositionComponent(0, 0));
+            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
+            gameState.addComponent(cheater, new MoveIntentComponent(1, 1, 10L));
+
+            slitSystem.update(gameState, 10L);
+
+            PositionComponent pos = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            assertEquals(1, pos.getX());
+            assertEquals(1, pos.getY(), "NOCLIP should slice diagonally through blocked corners");
         }
     }
 }
