@@ -9,6 +9,7 @@ import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.world.GameWorld;
+import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;

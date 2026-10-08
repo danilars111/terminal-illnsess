@@ -44,9 +44,9 @@ public record CooldownComponent(
 
     public CooldownComponent tick() {
         if(cooldowns.isEmpty()) { return this; }
-        Map<String, Integer> next = new HashMap<String, Integer>(cooldowns);
+        Map<String, Integer> next = new HashMap<>();
         for(Map.Entry<String, Integer> entry : cooldowns.entrySet()) {
-            int remainingTicks = cooldowns.get(entry.getValue()) - 1;
+            int remainingTicks = entry.getValue() - 1;
             if(remainingTicks > 0) {
                 next.put(entry.getKey(), remainingTicks);
             }
