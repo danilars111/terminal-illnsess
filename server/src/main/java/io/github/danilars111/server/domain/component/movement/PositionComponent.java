@@ -5,6 +5,9 @@ import io.github.danilars111.server.domain.world.records.TileCoord;
 
 public record PositionComponent(int x, int y) implements Component {
 
+    public  PositionComponent(TileCoord tileCoord) {
+        this(tileCoord.getX(), tileCoord.getY());
+    }
     public PositionComponent translate(int deltaX, int deltaY) {
         return new PositionComponent(this.x + deltaX, this.y + deltaY);
     }

@@ -52,6 +52,13 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         this(world, allowDiagonal, stepCostCalculator, MAX_EXPANSIONS_DEFAULT);
     }
 
+    public FastestPathAStarPathfinder(
+            GameWorld world,
+            StepCostCalculator stepCostCalculator
+    ) {
+        this(world, true, stepCostCalculator, MAX_EXPANSIONS_DEFAULT);
+    }
+
     private record Node(TileCoord coord, long gCost, long fCost) implements Comparable<Node> {
         @Override
         public int compareTo(Node o) {
