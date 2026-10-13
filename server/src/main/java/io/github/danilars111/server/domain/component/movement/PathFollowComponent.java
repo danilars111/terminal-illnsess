@@ -1,12 +1,13 @@
 package io.github.danilars111.server.domain.component.movement;
 
+import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public class PathFollowComponent {
+public class PathFollowComponent implements Component {
     private final List<TileCoord> waypoints;
     private final List<Long> expectedCostUnits;
     private int currentIndex;
