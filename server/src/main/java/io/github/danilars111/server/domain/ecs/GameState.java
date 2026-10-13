@@ -4,7 +4,7 @@ import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
-import io.github.danilars111.server.domain.world.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;

@@ -1,7 +1,6 @@
-package io.github.danilars111.server.domain.component;
+package io.github.danilars111.server.domain.component.movement;
 
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
-import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

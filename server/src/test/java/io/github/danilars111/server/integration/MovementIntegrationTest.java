@@ -14,7 +14,7 @@ import io.github.danilars111.server.domain.engine.GameEngine;
 import io.github.danilars111.server.domain.system.CooldownSystem;
 import io.github.danilars111.server.domain.system.MovementSystem;
 import io.github.danilars111.server.domain.world.GameWorld;
-import io.github.danilars111.server.domain.world.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;

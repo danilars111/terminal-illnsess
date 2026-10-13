@@ -9,9 +9,10 @@ import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.system.interfaces.GameSystem;
+import io.github.danilars111.server.domain.time.EngineTime;
 import io.github.danilars111.server.domain.world.GameWorld;
-import io.github.danilars111.server.domain.world.indices.SpatialIndex;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.lang.System.Logger;
@@ -25,7 +26,10 @@ public class MovementSystem implements GameSystem {
 
     private static final Logger LOGGER = System.getLogger(MovementSystem.class.getName());
     public static final String COOLDOWN_KEY = "system:movement";
-    private static final double SQRT_2 = Math.sqrt(2);
+
+    // Fixed-point scale for sqrt(2) * 1000 = 1414
+    private static final long DIAGONAL_SCALE_NUMERATOR = EngineTime.SQRT_2;
+    private static final long SCALE_DENOMINATOR = EngineTime.TICK_SCALE;
 
     private final GameWorld world;
     private final int defaultCooldownTicks;
@@ -48,6 +52,7 @@ public class MovementSystem implements GameSystem {
             return;
         }
 
+        // Deterministic sorting: by request tick first, tie-break with EntityId
         List<EntityId> sortedEntities = intendingEntities.stream()
                 .sorted(Comparator
                         .comparingLong((EntityId id) ->
@@ -138,9 +143,8 @@ public class MovementSystem implements GameSystem {
             for (TileCoord coord : targetCoords) {
                 Set<EntityId> entitiesOnTile = spatialIndex.getEntitiesAt(coord.getX(), coord.getY());
 
-                // Movers respect colliders regardless of whether the mover itself has a ColliderComponent
                 boolean blocked = entitiesOnTile.stream()
-                        .filter(otherId -> !otherId.equals(entityId)) // Ignore self
+                        .filter(otherId -> !otherId.equals(entityId))
                         .anyMatch(otherId -> gameState.getComponent(otherId, ColliderComponent.class).isPresent());
 
                 if (blocked) {
@@ -155,9 +159,11 @@ public class MovementSystem implements GameSystem {
         PositionComponent newPosition = currentPos.translate(dx, dy);
         gameState.addComponent(entityId, newPosition);
 
-        // 5. Cooldown application (~1.414x for diagonal steps)
+        // 5. Cooldown application using fixed-point integer rounding
         if (defaultCooldownTicks > 0) {
-            int appliedCooldown = isDiagonal ? (int) Math.round(defaultCooldownTicks * SQRT_2) : defaultCooldownTicks;
+            int appliedCooldown = isDiagonal
+                    ? (int) ((defaultCooldownTicks * DIAGONAL_SCALE_NUMERATOR + (SCALE_DENOMINATOR / 2)) / SCALE_DENOMINATOR)
+                    : defaultCooldownTicks;
             gameState.addComponent(entityId, cooldown.withCooldown(COOLDOWN_KEY, appliedCooldown));
         }
 
@@ -174,5 +180,4 @@ public class MovementSystem implements GameSystem {
                 .filter(otherId -> !otherId.equals(selfId))
                 .anyMatch(otherId -> gameState.getComponent(otherId, ColliderComponent.class).isPresent());
     }
-
 }

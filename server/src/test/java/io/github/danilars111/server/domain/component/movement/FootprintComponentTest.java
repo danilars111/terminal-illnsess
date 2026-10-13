@@ -1,5 +1,6 @@
-package io.github.danilars111.server.domain.component;
+package io.github.danilars111.server.domain.component.movement;
 
+import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.FootprintComponent.Rotation;
 import io.github.danilars111.server.domain.component.FootprintComponent.TileOffset;
 import io.github.danilars111.server.domain.world.records.TileCoord;

@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.world.indices;
+package io.github.danilars111.server.domain.service.indices;
 
 import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
@@ -17,8 +17,8 @@ import java.util.Set;
 public class SpatialIndex {
 
     // One tile can hold multiple entities
-    private Map<TileCoord, Set<EntityId>> tileToEntities = new HashMap<>();
-    private Map<EntityId, Set<TileCoord>> entityToTiles = new HashMap<>();
+    private final Map<TileCoord, Set<EntityId>> tileToEntities = new HashMap<>();
+    private final Map<EntityId, Set<TileCoord>> entityToTiles = new HashMap<>();
 
     public void updateEntity(EntityId entityId, PositionComponent pos) {
         updateEntity(entityId, pos, null);
