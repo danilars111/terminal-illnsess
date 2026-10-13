@@ -1,4 +1,4 @@
-package io.github.danilars111.server.domain.world.indices;
+package io.github.danilars111.server.domain.service.indices;
 
 import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
