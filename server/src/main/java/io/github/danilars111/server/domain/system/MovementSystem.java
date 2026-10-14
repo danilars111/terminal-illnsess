@@ -1,15 +1,11 @@
 package io.github.danilars111.server.domain.system;
 
-import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.CooldownComponent;
-import io.github.danilars111.server.domain.component.FootprintComponent;
-import io.github.danilars111.server.domain.component.movement.ColliderComponent;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
-import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
-import io.github.danilars111.server.domain.service.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.time.EngineTime;
 import io.github.danilars111.server.domain.world.GameWorld;
@@ -31,18 +27,28 @@ public class MovementSystem implements GameSystem {
     private static final long DIAGONAL_SCALE_NUMERATOR = EngineTime.SQRT_2;
     private static final long SCALE_DENOMINATOR = EngineTime.TICK_SCALE;
 
-    private final GameWorld world;
+    private final MovementRuleService movementRuleService;
     private final int defaultCooldownTicks;
-    private final boolean allowDiagonalMovement;
+
+    public MovementSystem(MovementRuleService movementRuleService, int defaultCooldownTicks) {
+        this.movementRuleService = Objects.requireNonNull(movementRuleService, "movementRuleService cannot be null");
+        this.defaultCooldownTicks = Math.max(0, defaultCooldownTicks);
+    }
 
     public MovementSystem(GameWorld world, int defaultCooldownTicks, boolean allowDiagonalMovement) {
-        this.world = Objects.requireNonNull(world, "World cannot be null");
-        this.defaultCooldownTicks = Math.max(0, defaultCooldownTicks);
-        this.allowDiagonalMovement = allowDiagonalMovement;
+        this(
+                new MovementRuleService(
+                        world,
+                        allowDiagonalMovement
+                                ? MovementRuleService.DiagonalMode.PERMISSIVE
+                                : MovementRuleService.DiagonalMode.NONE
+                ),
+                defaultCooldownTicks
+        );
     }
 
     public MovementSystem(GameWorld world, int defaultCooldownTicks) {
-        this(world, defaultCooldownTicks, true);
+        this(new MovementRuleService(world), defaultCooldownTicks);
     }
 
     @Override
@@ -80,22 +86,12 @@ public class MovementSystem implements GameSystem {
         int dx = intent.deltaX();
         int dy = intent.deltaY();
 
-        // 1. Validate step bounds (max 1 tile in any direction)
-        if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx == 0 && dy == 0)) {
-            return;
-        }
-
-        boolean isDiagonal = dx != 0 && dy != 0;
-        if (!allowDiagonalMovement && isDiagonal) {
-            return;
-        }
-
         PositionComponent currentPos = gameState.getComponent(entityId, PositionComponent.class).orElse(null);
         if (currentPos == null) {
             return;
         }
 
-        // 2. Validate Cooldown
+        // 1. Validate Cooldown
         CooldownComponent cooldown = gameState.getComponent(entityId, CooldownComponent.class)
                 .orElseGet(CooldownComponent::empty);
 
@@ -104,62 +100,22 @@ public class MovementSystem implements GameSystem {
             return;
         }
 
-        int targetX = currentPos.getX() + dx;
-        int targetY = currentPos.getY() + dy;
+        TileCoord fromCoord = currentPos.getTileCoord();
+        TileCoord toCoord = new TileCoord(currentPos.getX() + dx, currentPos.getY() + dy);
 
-        Set<TraversalMode> modes = gameState.getComponent(entityId, TraversalComponent.class)
-                .map(TraversalComponent::activeModes)
-                .orElse(Set.of());
-
-        boolean isNoClip = modes.contains(TraversalMode.NOCLIP);
-
-        // 3. Collision & Passability checks (completely skipped if NOCLIP)
-        if (!isNoClip) {
-            FootprintComponent footprint = gameState.getComponent(entityId, FootprintComponent.class)
-                    .orElseGet(FootprintComponent::singleTile);
-
-            List<TileCoord> targetCoords = footprint.getOccupiedCoords(targetX, targetY);
-
-            // 3a. Static terrain passability
-            for (TileCoord coord : targetCoords) {
-                if (!world.canPass(coord.getX(), coord.getY(), modes)) {
-                    return;
-                }
-            }
-
-            // 3b. Permissive diagonal flank check (terrain + dynamic obstacles)
-            if (isDiagonal) {
-                for (TileCoord coord : footprint.getOccupiedCoords(currentPos.getX(), currentPos.getY())) {
-                    boolean sideABlocked = isBlocked(gameState, coord.getX() + dx, coord.getY(), modes, entityId);
-                    boolean sideBBlocked = isBlocked(gameState, coord.getX(), coord.getY() + dy, modes, entityId);
-                    if (sideABlocked && sideBBlocked) {
-                        return; // Pinched corner
-                    }
-                }
-            }
-
-            // 3c. Dynamic entity collision check at destination
-            SpatialIndex spatialIndex = gameState.getSpatialIndex();
-            for (TileCoord coord : targetCoords) {
-                Set<EntityId> entitiesOnTile = spatialIndex.getEntitiesAt(coord.getX(), coord.getY());
-
-                boolean blocked = entitiesOnTile.stream()
-                        .filter(otherId -> !otherId.equals(entityId))
-                        .anyMatch(otherId -> gameState.getComponent(otherId, ColliderComponent.class).isPresent());
-
-                if (blocked) {
-                    LOGGER.log(Level.DEBUG, "Entity {0} blocked by collision at ({1}, {2})",
-                            entityId.value(), coord.getX(), coord.getY());
-                    return;
-                }
-            }
+        // 2. Delegate step bounds, diagonal modes, pinch, terrain, and colliders
+        if (!movementRuleService.canTraverseStep(gameState, entityId, fromCoord, toCoord)) {
+            LOGGER.log(Level.DEBUG, "Entity {0} move from {1} to {2} rejected by movement rules",
+                    entityId.value(), fromCoord, toCoord);
+            return;
         }
 
-        // 4. Commit position (GameState triggers SpatialIndex.updateEntity)
+        // 3. Commit position (GameState update triggers SpatialIndex sync)
         PositionComponent newPosition = currentPos.translate(dx, dy);
         gameState.addComponent(entityId, newPosition);
 
-        // 5. Cooldown application using fixed-point integer rounding
+        // 4. Cooldown application using fixed-point integer rounding
+        boolean isDiagonal = (dx != 0 && dy != 0);
         if (defaultCooldownTicks > 0) {
             int appliedCooldown = isDiagonal
                     ? (int) ((defaultCooldownTicks * DIAGONAL_SCALE_NUMERATOR + (SCALE_DENOMINATOR / 2)) / SCALE_DENOMINATOR)
@@ -167,17 +123,7 @@ public class MovementSystem implements GameSystem {
             gameState.addComponent(entityId, cooldown.withCooldown(COOLDOWN_KEY, appliedCooldown));
         }
 
-        LOGGER.log(Level.DEBUG, "Entity {0} moved from ({1}, {2}) to ({3}, {4}) on tick {5}",
-                entityId.value(), currentPos.getX(), currentPos.getY(),
-                newPosition.getX(), newPosition.getY(), tick);
-    }
-
-    private boolean isBlocked(GameState gameState, int x, int y, Set<TraversalMode> modes, EntityId selfId) {
-        if (!world.canPass(x, y, modes)) {
-            return true;
-        }
-        return gameState.getSpatialIndex().getEntitiesAt(x, y).stream()
-                .filter(otherId -> !otherId.equals(selfId))
-                .anyMatch(otherId -> gameState.getComponent(otherId, ColliderComponent.class).isPresent());
+        LOGGER.log(Level.DEBUG, "Entity {0} moved from {1} to {2} on tick {3}",
+                entityId.value(), fromCoord, toCoord, tick);
     }
 }

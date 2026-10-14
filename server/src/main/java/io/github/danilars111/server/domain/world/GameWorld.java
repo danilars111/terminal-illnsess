@@ -2,6 +2,7 @@ package io.github.danilars111.server.domain.world;
 
 import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
+import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -50,12 +51,20 @@ public class GameWorld {
         }
         return false;
     }
+
+    public boolean canPass(TileCoord tileCoord, Set<TraversalMode> modes) {
+        return canPass(tileCoord.getX(), tileCoord.getY(), modes);
+    }
     
     public TileDefinition getTile(int x, int y) {
         if(!isWithinBounds(x, y)) {
             throw new IndexOutOfBoundsException("Coordinates outside of game world (" + x + ", " + y + ")");
         }
         return tiles[toIndex(x, y)];
+    }
+
+    public void setTile(TileCoord tileCoord, TileDefinition tile) {
+        setTile(tileCoord.getX(), tileCoord.getY(), tile);
     }
 
     public void setTile(int x, int y, TileDefinition tile) {
