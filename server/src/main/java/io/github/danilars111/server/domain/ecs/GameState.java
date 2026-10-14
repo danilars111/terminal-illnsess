@@ -5,6 +5,8 @@ import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -29,18 +31,27 @@ public class GameState {
     private final Map<EntityId, Map<Class<? extends Component>, Component>> componentsByEntity = new HashMap<>();
 
     private final SpatialIndex spatialIndex;
+    private final TileIndex tileIndex;
+    StepCostModifierIndex stepCostModifierIndex;
 
-    public GameState(SpatialIndex spatialIndex) {
+    public GameState(SpatialIndex spatialIndex, TileIndex tileIndex, StepCostModifierIndex stepCostModifierIndex) {
         this.spatialIndex = spatialIndex;
+        this.tileIndex = tileIndex;
+        this.stepCostModifierIndex = stepCostModifierIndex;
     }
 
     public GameState() {
-        this(new SpatialIndex());
+        this(
+                new SpatialIndex(),
+                new TileIndex(),
+                new StepCostModifierIndex());
     }
 
     public SpatialIndex getSpatialIndex() {
         return spatialIndex;
     }
+    public TileIndex getTileIndex() { return  tileIndex; }
+    public StepCostModifierIndex getStepCostModifierIndex() { return stepCostModifierIndex; }
 
     public EntityId createEntity() {
         EntityId id = new EntityId(nextEntityId.getAndIncrement());

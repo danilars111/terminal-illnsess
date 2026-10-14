@@ -2,6 +2,9 @@ package io.github.danilars111.server.domain.world;
 
 import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
+import io.github.danilars111.server.domain.ecs.GameState;
+import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +18,9 @@ public class GameWorldTest {
     private TileDefinition ground;
     private TileDefinition wall;
     private TileDefinition water;
+    private GameEngine engine;
+    private GameState gameState;
+    private TileIndex tileIndex;
 
     @BeforeEach
     void setUp() {
@@ -32,18 +38,26 @@ public class GameWorldTest {
                 "Water",
                 Set.of(TraversalMode.SWIMMING, TraversalMode.FLYING)
         );
-        world = new GameWorld(3, 3, ground);
+
+        engine = new GameEngine();
+        gameState = engine.getGameState();
+        tileIndex = gameState.getTileIndex();
+        tileIndex.register(ground);
+        tileIndex.register(wall);
+        tileIndex.register(water);
+
+        world = new GameWorld(3, 3, ground.id(), tileIndex);
     }
 
     @Test
     @DisplayName("Adding a map grid larger than height * width throws IllegalArgumentException")
     void rejectsLargeMap() {
-        TileDefinition[] grid = new TileDefinition[]{
-                ground, ground, wall,     // y = 0
-                ground, water, wall,     // y = 1
-                ground, ground, ground  // y = 2
+        String[] grid = new String[]{
+                ground.id(), ground.id(), wall.id(),     // y = 0
+                ground.id(), water.id(), wall.id(),     // y = 1
+                ground.id(), ground.id(), ground.id()  // y = 2
         };
-        assertThrows(IllegalArgumentException.class, () -> new GameWorld(2, 2, grid));
+        assertThrows(IndexOutOfBoundsException.class, () -> new GameWorld(2, 2, grid, tileIndex));
     }
 
     @Test
@@ -61,8 +75,8 @@ public class GameWorldTest {
     @Test
     @DisplayName("canPass checks tile traversability according to TraversalMode")
     void checksPassabilityByMode() {
-        world.setTile(1, 1, water);
-        world.setTile(2, 2, wall);
+        world.setTile(1, 1, water.id());
+        world.setTile(2, 2, wall.id());
 
         // Ground at (0, 0)
         assertTrue(world.canPass(0, 0, Set.of(TraversalMode.WALKING)));
@@ -95,7 +109,10 @@ public class GameWorldTest {
                 Set.of(TraversalMode.WALKING),
                 Set.of("slow_movement")
         );
-        world.setTile(0, 1, swamp);
+
+        tileIndex.register(swamp);
+
+        world.setTile(0, 1, swamp.id());
         assertEquals(swamp, world.getTile(0, 1));
         assertTrue(world.getTile(0,1).hasEffect("slow_movement"));
     }
@@ -104,6 +121,6 @@ public class GameWorldTest {
     @DisplayName("Accessing out of bounds tiles throws IndexOutOfBoundsException")
     void outOfBoundsThrowsException() {
         assertThrows(IndexOutOfBoundsException.class, () -> world.getTile(-1, 0));
-        assertThrows(IndexOutOfBoundsException.class, () -> world.setTile(5, 5, ground));
+        assertThrows(IndexOutOfBoundsException.class, () -> world.setTile(5, 5, ground.id()));
     }
 }

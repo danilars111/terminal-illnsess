@@ -14,6 +14,7 @@ import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.GameEngine;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.service.pathfinding.algorithm.FastestPathAStarPathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.cost.StandardStepCostCalculator;
@@ -62,12 +63,13 @@ public class PathfindingIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        TileDefinition[] grid = new TileDefinition[WORLD_SIZE * WORLD_SIZE];
-        Arrays.fill(grid, grass);
-        world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grid);
 
         engine = new GameEngine();
         gameState = engine.getGameState();
+
+        TileIndex tileIndex = gameState.getTileIndex();
+        tileIndex.register(grass);
+        world = new GameWorld(WORLD_SIZE, WORLD_SIZE, tileIndex.getId(grass.id()), tileIndex);
         movementRuleService = new MovementRuleService(world);
 
         // 1. Setup cost calculator based on terrain & colliders
@@ -163,7 +165,7 @@ public class PathfindingIntegrationTest {
         Path directPath = extractSuccessPath(directResult);
         assertEquals(4, directPath.waypoints().size(), "Baseline path should be direct straight line");
 
-        StepCostModifierIndex modifierIndex = new StepCostModifierIndex();
+        StepCostModifierIndex modifierIndex = gameState.getStepCostModifierIndex();
         modifierIndex.register(new StepCostModifierDefinition(
                 "swamp_penalty",
                 "Swamp Penalty",
@@ -173,8 +175,7 @@ public class PathfindingIntegrationTest {
 
         StepCostCalculator modifiedCalculator = new StandardStepCostCalculator(
                 gameState,
-                new MovementRuleService(world),
-                modifierIndex
+                new MovementRuleService(world)
         ) {
             @Override
             public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {
@@ -217,7 +218,7 @@ public class PathfindingIntegrationTest {
         EntityId braveNpc = spawnNpc(start);
         EntityId cautiousNpc = spawnNpc(start);
 
-        StepCostModifierIndex modifierIndex = new StepCostModifierIndex();
+        StepCostModifierIndex modifierIndex = gameState.getStepCostModifierIndex();
         modifierIndex.register(new StepCostModifierDefinition(
                 "hazard_avoidance",
                 "Hazard Avoidance",
@@ -227,8 +228,7 @@ public class PathfindingIntegrationTest {
 
         StepCostCalculator dynamicCalc = new StandardStepCostCalculator(
                 gameState,
-                new MovementRuleService(world),
-                modifierIndex
+                new MovementRuleService(world)
         ) {
             @Override
             public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {

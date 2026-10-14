@@ -11,6 +11,7 @@ import io.github.danilars111.server.domain.component.movement.TraversalComponent
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.world.GameWorld;
 import io.github.danilars111.server.domain.world.records.TileCoord;
@@ -51,6 +52,7 @@ public class MovementSystemTest {
     private MovementSystem movementSystem;
     private GameWorld world;
     private MovementRuleService movementRuleService;
+    private TileIndex tileIndex;
 
 
     @BeforeAll
@@ -68,16 +70,22 @@ public class MovementSystemTest {
     @BeforeEach
     void setUp() {
         gameState = new GameState();
+        tileIndex = gameState.getTileIndex();
+        tileIndex.register(grass);
+        tileIndex.register(water);
+        tileIndex.register(mountain);
+        tileIndex.register(wall);
+
         // 3x3 layout:
         // y = 2: (0,2) grass    | (1,2) grass | (2,2) mountain
         // y = 1: (0,1) grass    | (1,1) water | (2,1) wall
         // y = 0: (0,0) grass    | (1,0) grass | (2,0) wall
-        TileDefinition[] grid = new TileDefinition[]{
-                grass, grass, wall,     // y = 0
-                grass, water, wall,     // y = 1
-                grass, grass, mountain  // y = 2
+        short[] grid = new short[]{
+                tileIndex.getId(grass.id()), tileIndex.getId(grass.id()), tileIndex.getId(wall.id()),             // y = 0
+                tileIndex.getId(grass.id()), tileIndex.getId(water.id()), tileIndex.getId(wall.id()),             // y = 1
+                tileIndex.getId(grass.id()), tileIndex.getId(grass.id()), tileIndex.getId(mountain.id())          // y = 2
         };
-        world = new GameWorld(3, 3, grid);
+        world = new GameWorld(3, 3, grid, tileIndex);
         movementRuleService = new MovementRuleService(world);
         movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
     }
@@ -191,11 +199,11 @@ public class MovementSystemTest {
         @Test
         @DisplayName("Permissive cornering: Blocks diagonal when BOTH cardinal sides are blocked")
         void blocksDiagonalWhenBothSidesBlocked() {
-            TileDefinition[] slitTiles = new TileDefinition[]{
-                    grass, wall,
-                    wall,  grass
+            String[] slitTiles = new String[]{
+                    grass.id(), wall.id(),
+                    wall.id(),  grass.id()
             };
-            GameWorld slitWorld = new GameWorld(2, 2, slitTiles);
+            GameWorld slitWorld = new GameWorld(2, 2, slitTiles, tileIndex);
             movementRuleService = new MovementRuleService(slitWorld);
             MovementSystem slitSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
@@ -374,10 +382,10 @@ public class MovementSystemTest {
             // 2x1 footprint at (0, 0) occupies (0, 0) and (1, 0)
             // Moving +1 X to (1, 0) occupies (1, 0) and (2, 0)
             // (1, 0) is already occupied by this entity, but it shouldn't collide with itself
-            TileDefinition[] openRow = new TileDefinition[]{
-                    grass, grass, grass, grass
+            String[] openRow = new String[]{
+                    grass.id(), grass.id(), grass.id(), grass.id()
             };
-            GameWorld linearWorld = new GameWorld(4, 1, openRow);
+            GameWorld linearWorld = new GameWorld(4, 1, openRow, tileIndex);
             movementRuleService = new MovementRuleService(linearWorld);
             MovementSystem openMovementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
@@ -463,11 +471,11 @@ public class MovementSystemTest {
         @DisplayName("Diagonal movement is blocked when flanked by dynamic colliders on both sides")
         void blocksDiagonalWhenBothFlanksHaveDynamicColliders() {
             // Flat grass map 2x2
-            TileDefinition[] allGrass = new TileDefinition[]{
-                    grass, grass,
-                    grass, grass
+            String[] allGrass = new String[]{
+                    grass.id(), grass.id(),
+                    grass.id(), grass.id()
             };
-            GameWorld flatWorld = new GameWorld(2, 2, allGrass);
+            GameWorld flatWorld = new GameWorld(2, 2, allGrass, tileIndex);
             movementRuleService = new  MovementRuleService(flatWorld);
             MovementSystem testSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
@@ -537,11 +545,11 @@ public class MovementSystemTest {
         @Test
         @DisplayName("Entity with NOCLIP can cut diagonally through fully blocked pinch points")
         void noClipBypassesCornerPinching() {
-            TileDefinition[] slitTiles = new TileDefinition[]{
-                    grass, wall,
-                    wall,  grass
+            String[] slitTiles = new String[]{
+                    grass.id(), wall.id(),
+                    wall.id(),  grass.id()
             };
-            GameWorld slitWorld = new GameWorld(2, 2, slitTiles);
+            GameWorld slitWorld = new GameWorld(2, 2, slitTiles, tileIndex);
             movementRuleService = new MovementRuleService(slitWorld);
             MovementSystem slitSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
