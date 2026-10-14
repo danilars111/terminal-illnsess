@@ -6,9 +6,12 @@ import io.github.danilars111.server.domain.component.movement.ColliderComponent;
 import io.github.danilars111.server.domain.component.movement.PathFollowComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
+import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.service.pathfinding.algorithm.FastestPathAStarPathfinder;
+import io.github.danilars111.server.domain.service.pathfinding.cost.StandardStepCostCalculator;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathValidator;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.Pathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.StepCostCalculator;
@@ -57,23 +60,7 @@ public class PathfindingIntegrationTest {
         engine = new GameEngine();
 
         // 1. Setup cost calculator based on terrain & colliders
-        StepCostCalculator costCalculator = (entityId, from, to, footprint) -> {
-            // Static impassable
-            if (!world.canPass(to.getX(), to.getY(), Set.of(TraversalMode.WALKING))) {
-                return EngineTime.INFINITE;
-            }
-            // Dynamic colliders
-            boolean blockedByEntity = engine.getGameState().getSpatialIndex().getEntitiesAt(to.getX(), to.getY()).stream()
-                    .filter(other -> !other.equals(entityId))
-                    .anyMatch(other -> engine.getGameState().getComponent(other, ColliderComponent.class).isPresent());
-
-            if (blockedByEntity) {
-                return EngineTime.INFINITE;
-            }
-
-            boolean isDiagonal = (from.getX() != to.getX()) && (from.getY() != to.getY());
-            return isDiagonal ? EngineTime.SQRT_2 : EngineTime.TICK_SCALE;
-        };
+        StepCostCalculator costCalculator = new StandardStepCostCalculator(engine.getGameState(), new MovementRuleService(world));
 
         pathValidator = new DefaultPathValidator(costCalculator);
         pathfinder = new FastestPathAStarPathfinder(world, costCalculator);

@@ -24,7 +24,6 @@ public class DefaultPathValidator implements PathValidator {
     public PathValidationResult validate(
             EntityId entityId,
             PathFollowComponent pathFollow,
-            FootprintComponent footprint,
             int lookaheadSteps) {
 
         if(pathFollow.isComplete()) {
@@ -41,7 +40,7 @@ public class DefaultPathValidator implements PathValidator {
             TileCoord from = waypoints.get(i - 1);
             TileCoord to = waypoints.get(i);
 
-            long actualCost = costCalculator.calculateStepCost(entityId, from, to, footprint);
+            long actualCost = costCalculator.calculateStepCost(entityId, from, to);
 
             // Hard block check
             if (actualCost == EngineTime.INFINITE || actualCost <= 0L ) {

@@ -22,7 +22,7 @@ public class DefaultPathValidatorTest {
     @Test
     @DisplayName("Returns Valid when all waypoints within lookahead remain passable at planned cost")
     void validPathStaysPassable() {
-        StepCostCalculator costCalc = (id, from, to, fp) -> EngineTime.ticksToUnits(2);
+        StepCostCalculator costCalc = (id, from, to) -> EngineTime.ticksToUnits(2);
         DefaultPathValidator validator = new DefaultPathValidator(costCalc);
 
         List<TileCoord> waypoints = List.of(
@@ -33,7 +33,7 @@ public class DefaultPathValidatorTest {
         List<Long> costs = List.of(0L, EngineTime.ticksToUnits(2), EngineTime.ticksToUnits(2));
         PathFollowComponent follow = new PathFollowComponent(waypoints, costs, 1);
 
-        PathValidationResult result = validator.validate(entity, follow, footprint, 3);
+        PathValidationResult result = validator.validate(entity, follow, 3);
 
         assertInstanceOf(PathValidationResult.Valid.class, result);
     }
@@ -43,7 +43,7 @@ public class DefaultPathValidatorTest {
     void detectsBlockedTileInLookahead() {
         TileCoord obstacleTile = new TileCoord(2, 0);
 
-        StepCostCalculator costCalc = (id, from, to, fp) -> {
+        StepCostCalculator costCalc = (id, from, to) -> {
             if (to.equals(obstacleTile)) {
                 return EngineTime.INFINITE; // Dynamic barricade erected
             }
@@ -59,7 +59,7 @@ public class DefaultPathValidatorTest {
         );
         PathFollowComponent follow = new PathFollowComponent(waypoints, List.of(0L, 2000L, 2000L, 2000L), 1);
 
-        PathValidationResult result = validator.validate(entity, follow, footprint, 3);
+        PathValidationResult result = validator.validate(entity, follow, 3);
 
         assertInstanceOf(PathValidationResult.Blocked.class, result);
         PathValidationResult.Blocked blocked = (PathValidationResult.Blocked) result;
@@ -72,7 +72,7 @@ public class DefaultPathValidatorTest {
     void ignoresBlockBeyondLookaheadHorizon() {
         TileCoord farObstacle = new TileCoord(4, 0);
 
-        StepCostCalculator costCalc = (id, from, to, fp) -> {
+        StepCostCalculator costCalc = (id, from, to) -> {
             if (to.equals(farObstacle)) {
                 return EngineTime.INFINITE;
             }
@@ -90,7 +90,7 @@ public class DefaultPathValidatorTest {
         PathFollowComponent follow = new PathFollowComponent(waypoints, List.of(0L, 2000L, 2000L, 2000L, 2000L), 1);
 
         // Lookahead is only 2 steps: checks index 1 and 2, but farObstacle is at index 4
-        PathValidationResult result = validator.validate(entity, follow, footprint, 2);
+        PathValidationResult result = validator.validate(entity, follow, 2);
 
         assertInstanceOf(PathValidationResult.Valid.class, result);
     }
@@ -101,7 +101,7 @@ public class DefaultPathValidatorTest {
         TileCoord hazardTile = new TileCoord(1, 0);
 
         // Hazard adds even 1 millitick or whole tick
-        StepCostCalculator costCalc = (id, from, to, fp) -> {
+        StepCostCalculator costCalc = (id, from, to) -> {
             if (to.equals(hazardTile)) {
                 return EngineTime.ticksToUnits(3); // Planned was 2, now 3
             }
@@ -113,7 +113,7 @@ public class DefaultPathValidatorTest {
         List<Long> plannedCosts = List.of(0L, EngineTime.ticksToUnits(2));
         PathFollowComponent follow = new PathFollowComponent(waypoints, plannedCosts, 1);
 
-        PathValidationResult result = validator.validate(entity, follow, footprint, 2);
+        PathValidationResult result = validator.validate(entity, follow, 2);
 
         assertInstanceOf(PathValidationResult.CostInflated.class, result);
         PathValidationResult.CostInflated inflated = (PathValidationResult.CostInflated) result;

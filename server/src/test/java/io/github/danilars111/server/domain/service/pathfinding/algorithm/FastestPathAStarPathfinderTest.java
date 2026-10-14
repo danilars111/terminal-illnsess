@@ -61,7 +61,7 @@ class FastestPathAStarPathfinderTest {
         @DisplayName("Returns single-step zero-cost success when start equals goal")
         void returnsSingleStepZeroCostWhenStartEqualsGoal() {
             GameWorld gameWorld = createUniformWorld(5, 5);
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> EngineTime.ticksToUnits(4);
+            StepCostCalculator costCalc = (entityId, from, to) -> EngineTime.ticksToUnits(4);
             Pathfinder pathfinder = new FastestPathAStarPathfinder(gameWorld, false, costCalc);
 
             TileCoord start = new TileCoord(2,2);
@@ -83,7 +83,7 @@ class FastestPathAStarPathfinderTest {
         void findsStraightLinePath() {
             GameWorld world = createUniformWorld(5, 1);
             long stepCost = EngineTime.ticksToUnits(4); // 4000 units per step
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> stepCost;
+            StepCostCalculator costCalc = (entityId, from, to) -> stepCost;
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
 
             TileCoord start = new TileCoord(0, 0);
@@ -124,7 +124,7 @@ class FastestPathAStarPathfinderTest {
             GameWorld world = createUniformWorld(3, 3);
 
             TileCoord swamp = new TileCoord(1, 1);
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> {
+            StepCostCalculator costCalc = (entityId, from, to) -> {
                 if (to.equals(swamp)) {
                     return EngineTime.ticksToUnits(30);
                 }
@@ -153,7 +153,7 @@ class FastestPathAStarPathfinderTest {
             GameWorld world = createUniformWorld(3, 3);
             TileCoord wall = new TileCoord(1, 1);
 
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> {
+            StepCostCalculator costCalc = (entityId, from, to) -> {
                 if (to.equals(wall)) {
                     return EngineTime.INFINITE;
                 }
@@ -178,7 +178,7 @@ class FastestPathAStarPathfinderTest {
             GameWorld world = createUniformWorld(3, 3);
             long baseCost = EngineTime.ticksToUnits(1); // 1000 units
 
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> {
+            StepCostCalculator costCalc = (entityId, from, to) -> {
                 int dx = Math.abs(from.getX() - to.getX());
                 int dy = Math.abs(from.getY() - to.getY());
                 if (dx != 0 && dy != 0) {
@@ -216,7 +216,7 @@ class FastestPathAStarPathfinderTest {
             TileCoord wall1 = new TileCoord(2, 0);
             TileCoord wall2 = new TileCoord(3, 0);
 
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> {
+            StepCostCalculator costCalc = (entityId, from, to) -> {
                 if (to.equals(wall1) || to.equals(wall2)) {
                     return EngineTime.INFINITE;
                 }
@@ -243,7 +243,7 @@ class FastestPathAStarPathfinderTest {
         void abortsWithBudgetExhaustedWhenBudgetExceeded() {
             // 20x20 open world
             GameWorld world = createUniformWorld(20, 20);
-            StepCostCalculator costCalc = (entityId, from, to, footprint) -> EngineTime.ticksToUnits(1);
+            StepCostCalculator costCalc = (entityId, from, to) -> EngineTime.ticksToUnits(1);
 
             // Intentionally set a tiny budget of 5 expansions
             int maxExpansions = 5;
