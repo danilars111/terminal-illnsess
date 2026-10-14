@@ -5,6 +5,7 @@ import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.Pathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.StepCostCalculator;
@@ -28,16 +29,18 @@ class FastestPathAStarPathfinderTest {
     private GameState gameState;
     private TileDefinition defaultTile;
     private EntityId mover;
+    private TileIndex tileIndex;
 
     @BeforeEach
     void setUp() {
         gameState = new GameState();
         mover = gameState.createEntity();
         defaultTile = new TileDefinition("grass", "Grass", Set.of(TraversalMode.WALKING));
+        tileIndex = gameState.getTileIndex();
     }
 
     private GameWorld createUniformWorld(int width, int height) {
-        return new GameWorld(width, height, defaultTile);
+        return new GameWorld(width, height, defaultTile.id(), tileIndex);
     }
 
     private PathfindingRequest createRequest(TileCoord start, TileCoord goal) {

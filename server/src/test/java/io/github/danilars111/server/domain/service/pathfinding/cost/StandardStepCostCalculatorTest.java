@@ -11,6 +11,7 @@ import io.github.danilars111.server.domain.component.movement.TraversalComponent
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.time.EngineTime;
 import io.github.danilars111.server.domain.world.GameWorld;
@@ -47,13 +48,14 @@ class StandardStepCostCalculatorTest {
         gameState.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
         gameState.addComponent(mover, FootprintComponent.singleTile());
 
-        TileDefinition[] grid = new TileDefinition[100];
-        Arrays.fill(grid, walkableTile);
-        GameWorld world = new GameWorld(10, 10, grid);
+        TileIndex tileIndex = gameState.getTileIndex();
+        tileIndex.register(walkableTile);
+
+        GameWorld world = new GameWorld(10, 10, walkableTile.id(), tileIndex);
 
         movementRuleService = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
-        modifierIndex = new StepCostModifierIndex();
-        calculator = new StandardStepCostCalculator(gameState, movementRuleService, modifierIndex);
+        modifierIndex = gameState.getStepCostModifierIndex();
+        calculator = new StandardStepCostCalculator(gameState, movementRuleService);
     }
 
     @Test

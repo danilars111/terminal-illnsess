@@ -11,6 +11,7 @@ import io.github.danilars111.server.domain.component.movement.TraversalComponent
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.system.CooldownSystem;
 import io.github.danilars111.server.domain.system.MovementSystem;
@@ -35,7 +36,7 @@ public class MovementIntegrationTest {
     private GameEngine engine;
     private MovementSystem movementSystem;
     private CooldownSystem cooldownSystem;
-    private MovementRuleService movementRuleService;
+    private TileIndex  tileIndex;
 
     private static final int WORLD_SIZE = 20;
     private static final int BASE_COOLDOWN = 4;
@@ -60,17 +61,17 @@ public class MovementIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        // 1. Create a traversable world covering (10, 10) -> (11, 9)
-        TileDefinition[] grid = new TileDefinition[WORLD_SIZE * WORLD_SIZE];
-        Arrays.fill(grid, grass);
-        GameWorld world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grid);
-        MovementRuleService movementRuleService = new MovementRuleService(world);
-
-        // 2. Initialize Cooldown and MovementSystem
-        cooldownSystem = new CooldownSystem();
-        movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
         engine = new GameEngine();
+
+        tileIndex = engine.getGameState().getTileIndex();
+        tileIndex.register(grass);
+
+        GameWorld world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grass.id(), tileIndex);
+        MovementRuleService movementRuleService = new MovementRuleService(world);
+
+        cooldownSystem = new CooldownSystem();
+        movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
         engine.registerSystem(cooldownSystem);
         engine.registerSystem(movementSystem);

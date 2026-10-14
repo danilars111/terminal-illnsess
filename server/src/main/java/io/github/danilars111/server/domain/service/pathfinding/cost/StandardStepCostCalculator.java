@@ -21,17 +21,13 @@ public class StandardStepCostCalculator implements StepCostCalculator {
 
     public StandardStepCostCalculator(
             GameState gameState,
-            MovementRuleService movementRuleService,
-            StepCostModifierIndex modifierIndex
+            MovementRuleService movementRuleService
     ) {
         this.gameState = Objects.requireNonNull(gameState, "GameState cannot be null");
         this.movementRuleService = Objects.requireNonNull(movementRuleService, "MovementRuleService cannot be null");
-        this.modifierIndex = Objects.requireNonNull(modifierIndex, "ModifierIndex cannot be null");
+        this.modifierIndex = gameState.getStepCostModifierIndex();
     }
 
-    public StandardStepCostCalculator(GameState gameState, MovementRuleService movementRuleService) {
-        this(gameState, movementRuleService, new StepCostModifierIndex());
-    }
 
     @Override
     public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {

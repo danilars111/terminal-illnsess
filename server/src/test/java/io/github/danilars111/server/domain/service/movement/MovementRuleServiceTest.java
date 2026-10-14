@@ -8,6 +8,7 @@ import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.world.GameWorld;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,20 +46,24 @@ public class MovementRuleServiceTest {
         state = new GameState();
         mover = state.createEntity();
 
+        TileIndex tileIndex = state.getTileIndex();
+        tileIndex.register(grass);
+        tileIndex.register(wall);
+
         state.addComponent(mover, new PositionComponent(5, 5));
         state.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
         state.addComponent(mover, FootprintComponent.singleTile());
 
-        world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grass);
+        world = new GameWorld(WORLD_SIZE, WORLD_SIZE, tileIndex.getId(grass.id()), tileIndex);
     }
 
     // Helper to mark a tile impassible in the real GameWorld
     private void setTileImpassable(TileCoord tile) {
-        world.setTile(tile, wall);
+        world.setTile(tile, wall.id());
     }
 
     private void setTilePassable(TileCoord tile) {
-        world.setTile(tile, grass);
+        world.setTile(tile, grass.id());
     }
 
     @Nested
