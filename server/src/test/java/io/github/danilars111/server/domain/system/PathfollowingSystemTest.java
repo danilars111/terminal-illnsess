@@ -48,7 +48,7 @@ class PathfollowingSystemTest {
         );
         gameState.addComponent(entity, follow);
 
-        PathValidator alwaysValid = (id, pf, fp, lookahead) -> new PathValidationResult.Valid();
+        PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), start);
 
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
@@ -80,7 +80,7 @@ class PathfollowingSystemTest {
         );
         gameState.addComponent(entity, follow);
 
-        PathValidator alwaysValid = (id, pf, fp, lookahead) -> new PathValidationResult.Valid();
+        PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), step1);
 
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
@@ -109,7 +109,7 @@ class PathfollowingSystemTest {
         );
         gameState.addComponent(entity, follow);
 
-        PathValidator alwaysValid = (id, pf, fp, lookahead) -> new PathValidationResult.Valid();
+        PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), goal);
 
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
@@ -134,7 +134,7 @@ class PathfollowingSystemTest {
         MoveIntentComponent existingIntent = new MoveIntentComponent(0, 1, 5L);
         gameState.addComponent(entity, existingIntent);
 
-        PathValidator alwaysValid = (id, pf, fp, lookahead) -> new PathValidationResult.Valid();
+        PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), start);
 
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
@@ -160,7 +160,7 @@ class PathfollowingSystemTest {
                 1
         ));
 
-        PathValidator blockedValidator = (id, pf, fp, lookahead) -> new PathValidationResult.Blocked(blockedTile, 1);
+        PathValidator blockedValidator = (id, pf, lookahead) -> new PathValidationResult.Blocked(blockedTile, 1);
 
         // Detour finder returns alternate route via (0, 1)
         Path detourPath = new Path(List.of(start, detourTile, goal), List.of(0L, 1000L, 1000L), 2000L);
@@ -188,7 +188,7 @@ class PathfollowingSystemTest {
                 1
         ));
 
-        PathValidator blockedValidator = (id, pf, fp, lookahead) -> new PathValidationResult.Blocked(blockedTile, 1);
+        PathValidator blockedValidator = (id, pf, lookahead) -> new PathValidationResult.Blocked(blockedTile, 1);
         Pathfinder failingFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), start);
 
         PathfollowingSystem system = new PathfollowingSystem(blockedValidator, failingFinder, 1);
@@ -215,7 +215,7 @@ class PathfollowingSystemTest {
                 1
         ));
 
-        PathValidator inflatedValidator = (id, pf, fp, lookahead) ->
+        PathValidator inflatedValidator = (id, pf, lookahead) ->
                 new PathValidationResult.CostInflated(inflatedTile, 1000L, 3000L);
 
         Path detourPath = new Path(List.of(start, detourTile, goal), List.of(0L, 1000L, 1000L), 2000L);
@@ -242,7 +242,7 @@ class PathfollowingSystemTest {
                 1
         ));
 
-        PathValidator inflatedValidator = (id, pf, fp, lookahead) ->
+        PathValidator inflatedValidator = (id, pf, lookahead) ->
                 new PathValidationResult.CostInflated(inflatedTile, 1000L, 3000L);
 
         // Pathfinder fails to find an alternative route

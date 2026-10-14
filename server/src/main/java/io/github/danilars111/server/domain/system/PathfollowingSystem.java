@@ -76,7 +76,7 @@ public class PathfollowingSystem implements GameSystem {
                 .orElse(FootprintComponent.singleTile());
 
         // Lookahead path validation
-        PathValidationResult validation = pathValidator.validate(entityId, follow, footprint, defaultLookahead);
+        PathValidationResult validation = pathValidator.validate(entityId, follow, defaultLookahead);
 
         switch (validation) {
             case PathValidationResult.Blocked blocked -> {

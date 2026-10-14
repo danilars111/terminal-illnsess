@@ -12,7 +12,6 @@ public interface PathValidator {
     PathValidationResult validate(
             EntityId entityId,
             PathFollowComponent pathFollow,
-            FootprintComponent footprint,
             int lookaheadSteps
     );
 }

@@ -10,5 +10,5 @@ public interface StepCostCalculator {
      * Calculates the cost of moving from one tile to another in sub-tick units.
      * @return Cost in EngineTime.TICK_SCALE units, or EngineTime.INFINITE if impassable/blocked.
      */
-    long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to, FootprintComponent footprint);
+    long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to);
 }

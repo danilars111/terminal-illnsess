@@ -194,7 +194,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
 
             TileCoord next = new TileCoord(nx, ny);
 
-            long stepCost = costCalculator.calculateStepCost(entityId, current.coord, next, footprint);
+            long stepCost = costCalculator.calculateStepCost(entityId, current.coord, next);
             if (stepCost == EngineTime.INFINITE || stepCost <= 0L) {
                 continue; // Blocked or impassable
             }
