@@ -117,15 +117,10 @@ public class PathfollowingSystem implements GameSystem {
         if (finalGoal.isEmpty()) {
             return false;
         }
-        Set<TraversalMode> modes = gameState.getComponent(entityId, TraversalComponent.class)
-                .map(TraversalComponent::activeModes).orElse(Set.of());
-
         PathfindingRequest request = new PathfindingRequest(
                 entityId,
                 currentCoord,
-                finalGoal.get(),
-                modes,
-                footprint
+                finalGoal.get()
         );
         PathResult result = pathfinder.findPath(gameState, request);
 

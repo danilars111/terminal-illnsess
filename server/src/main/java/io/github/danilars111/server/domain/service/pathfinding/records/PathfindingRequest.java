@@ -11,17 +11,11 @@ import java.util.Set;
 public record PathfindingRequest(
         EntityId entityId,
         TileCoord start,
-        TileCoord goal,
-        Set<TraversalMode> modes,
-        FootprintComponent footprint
+        TileCoord goal
 ) {
     public PathfindingRequest {
         Objects.requireNonNull(entityId, "EntityId cannot be null");
         Objects.requireNonNull(start, "Start coordinate cannot be null");
         Objects.requireNonNull(goal, "Goal coordinate cannot be null");
-        modes = modes != null ? Set.copyOf(modes) : Set.of();
-        if (footprint == null) {
-            footprint = FootprintComponent.singleTile();
-        }
     }
 }

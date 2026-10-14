@@ -11,6 +11,7 @@ import io.github.danilars111.server.domain.component.movement.TraversalComponent
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.system.CooldownSystem;
 import io.github.danilars111.server.domain.system.MovementSystem;
 import io.github.danilars111.server.domain.world.GameWorld;
@@ -34,6 +35,7 @@ public class MovementIntegrationTest {
     private GameEngine engine;
     private MovementSystem movementSystem;
     private CooldownSystem cooldownSystem;
+    private MovementRuleService movementRuleService;
 
     private static final int WORLD_SIZE = 20;
     private static final int BASE_COOLDOWN = 4;
@@ -62,10 +64,11 @@ public class MovementIntegrationTest {
         TileDefinition[] grid = new TileDefinition[WORLD_SIZE * WORLD_SIZE];
         Arrays.fill(grid, grass);
         GameWorld world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grid);
+        MovementRuleService movementRuleService = new MovementRuleService(world);
 
         // 2. Initialize Cooldown and MovementSystem
         cooldownSystem = new CooldownSystem();
-        movementSystem = new MovementSystem(world, BASE_COOLDOWN, true);
+        movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
         engine = new GameEngine();
 

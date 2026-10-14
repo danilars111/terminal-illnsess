@@ -11,6 +11,7 @@ import io.github.danilars111.server.domain.component.movement.TraversalComponent
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 
+import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.world.GameWorld;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeAll;
@@ -49,6 +50,7 @@ public class MovementSystemTest {
     private GameState gameState;
     private MovementSystem movementSystem;
     private GameWorld world;
+    private MovementRuleService movementRuleService;
 
 
     @BeforeAll
@@ -76,7 +78,8 @@ public class MovementSystemTest {
                 grass, grass, mountain  // y = 2
         };
         world = new GameWorld(3, 3, grid);
-        movementSystem = new MovementSystem(world, BASE_COOLDOWN, true);
+        movementRuleService = new MovementRuleService(world);
+        movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
     }
 
     private EntityId createWalkingEntity(int x, int y) {
@@ -170,19 +173,6 @@ public class MovementSystemTest {
         }
 
         @Test
-        @DisplayName("Disallows diagonal movement if allowDiagonalMovement flag is false")
-        void blocksDiagonalWhenDisabled() {
-            MovementSystem noDiagonalSystem = new MovementSystem(world, BASE_COOLDOWN, false);
-            EntityId id = createWalkingEntity(0, 1);
-            gameState.addComponent(id, new MoveIntentComponent(1, 1, 10L));
-
-            noDiagonalSystem.update(gameState, 10L);
-
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
-            assertEquals(0, pos.getX());
-            assertEquals(1, pos.getY());
-        }
-        @Test
         @DisplayName("Permissive cornering: Allows diagonal when one cardinal side is blocked and one is open")
         void allowsDiagonalWhenOneSideBlocked() {
             // Walker at (0, 1) -> target (1, 2) [grass]:
@@ -206,7 +196,8 @@ public class MovementSystemTest {
                     wall,  grass
             };
             GameWorld slitWorld = new GameWorld(2, 2, slitTiles);
-            MovementSystem slitSystem = new MovementSystem(slitWorld, BASE_COOLDOWN, true);
+            movementRuleService = new MovementRuleService(slitWorld);
+            MovementSystem slitSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
             EntityId id = createWalkingEntity(0, 0);
             gameState.addComponent(id, new MoveIntentComponent(1, 1, 10L));
@@ -309,7 +300,7 @@ public class MovementSystemTest {
         @DisplayName("Intents requested on earlier ticks are processed before later ticks")
         void processesEarlierTickFirst() {
             List<EntityId> executionOrder = new ArrayList<>();
-            MovementSystem trackingSystem = new MovementSystem(world, BASE_COOLDOWN, true) {
+            MovementSystem trackingSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN) {
                 @Override
                 protected void processEntityMove(GameState gs, EntityId id, MoveIntentComponent intent, long tick) {
                     executionOrder.add(id);
@@ -387,7 +378,8 @@ public class MovementSystemTest {
                     grass, grass, grass, grass
             };
             GameWorld linearWorld = new GameWorld(4, 1, openRow);
-            MovementSystem openMovementSystem = new MovementSystem(linearWorld, BASE_COOLDOWN, true);
+            movementRuleService = new MovementRuleService(linearWorld);
+            MovementSystem openMovementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
             EntityId walker = createWalkingEntity(0, 0);
             gameState.addComponent(walker, FootprintComponent.rectangle(2, 1));
@@ -476,7 +468,8 @@ public class MovementSystemTest {
                     grass, grass
             };
             GameWorld flatWorld = new GameWorld(2, 2, allGrass);
-            MovementSystem testSystem = new MovementSystem(flatWorld, BASE_COOLDOWN, true);
+            movementRuleService = new  MovementRuleService(flatWorld);
+            MovementSystem testSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
             // Mover at (0, 0) attempting diagonal to (1, 1)
             EntityId mover = createWalkingEntity(0, 0);
@@ -549,7 +542,8 @@ public class MovementSystemTest {
                     wall,  grass
             };
             GameWorld slitWorld = new GameWorld(2, 2, slitTiles);
-            MovementSystem slitSystem = new MovementSystem(slitWorld, BASE_COOLDOWN, true);
+            movementRuleService = new MovementRuleService(slitWorld);
+            MovementSystem slitSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
 
             EntityId cheater = gameState.createEntity();
             gameState.addComponent(cheater, new PositionComponent(0, 0));
