@@ -1,7 +1,6 @@
 package io.github.danilars111.server.domain.service.pathfinding.algorithm;
 
 import io.github.danilars111.server.domain.component.FootprintComponent;
-import io.github.danilars111.server.domain.component.interfaces.Component;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
@@ -78,7 +77,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
     public PathResult findPath(GameState state, PathfindingRequest req) {
         TileCoord start = req.start();
         TileCoord goal = req.goal();
-        FootprintComponent footprint = req.footprint();
+        FootprintComponent footprint = FootprintComponent.getFootprintFrom(state, req.entityId());
         EntityId entityId = req.entityId();
 
         if (start.equals(goal)) {

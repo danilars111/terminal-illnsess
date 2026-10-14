@@ -40,16 +40,11 @@ class FastestPathAStarPathfinderTest {
         return new GameWorld(width, height, defaultTile);
     }
 
-    private PathfindingRequest createRequest(TileCoord start, TileCoord goal, boolean allowNoclip) {
-        Set<TraversalMode> modes = allowNoclip
-                ? Set.of(TraversalMode.WALKING, TraversalMode.NOCLIP)
-                : Set.of(TraversalMode.WALKING);
+    private PathfindingRequest createRequest(TileCoord start, TileCoord goal) {
         return new PathfindingRequest(
                 mover,
                 start,
-                goal,
-                modes,
-                FootprintComponent.singleTile()
+                goal
         );
     }
 
@@ -66,7 +61,7 @@ class FastestPathAStarPathfinderTest {
 
             TileCoord start = new TileCoord(2,2);
             TileCoord goal = start;
-            PathfindingRequest request = createRequest(start, goal, false);
+            PathfindingRequest request = createRequest(start, goal);
 
             PathResult result = pathfinder.findPath(gameState, request);
             assertInstanceOf(PathResult.Success.class, result);
@@ -88,7 +83,7 @@ class FastestPathAStarPathfinderTest {
 
             TileCoord start = new TileCoord(0, 0);
             TileCoord goal = new TileCoord(3, 0);
-            PathfindingRequest request = createRequest(start, goal, false);
+            PathfindingRequest request = createRequest(start, goal);
 
             PathResult result = pathfinder.findPath(gameState, request);
 
@@ -135,7 +130,7 @@ class FastestPathAStarPathfinderTest {
             };
 
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
-            PathfindingRequest request = createRequest(new TileCoord(0, 1), new TileCoord(2, 1), false);
+            PathfindingRequest request = createRequest(new TileCoord(0, 1), new TileCoord(2, 1));
 
             PathResult result = pathfinder.findPath(gameState, request);
 
@@ -161,7 +156,7 @@ class FastestPathAStarPathfinderTest {
             };
 
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
-            PathfindingRequest request = createRequest(new TileCoord(0, 1), new TileCoord(2, 1), false);
+            PathfindingRequest request = createRequest(new TileCoord(0, 1), new TileCoord(2, 1));
 
             PathResult result = pathfinder.findPath(gameState, request);
 
@@ -188,7 +183,7 @@ class FastestPathAStarPathfinderTest {
             };
 
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, true, costCalc);
-            PathfindingRequest request = createRequest(new TileCoord(0, 0), new TileCoord(2, 2), false);
+            PathfindingRequest request = createRequest(new TileCoord(0, 0), new TileCoord(2, 2));
 
             PathResult result = pathfinder.findPath(gameState, request);
 
@@ -224,7 +219,7 @@ class FastestPathAStarPathfinderTest {
             };
 
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
-            PathfindingRequest request = createRequest(new TileCoord(0, 0), new TileCoord(4, 0), false);
+            PathfindingRequest request = createRequest(new TileCoord(0, 0), new TileCoord(4, 0));
 
             PathResult result = pathfinder.findPath(gameState, request);
 
@@ -251,7 +246,7 @@ class FastestPathAStarPathfinderTest {
 
             TileCoord start = new TileCoord(0, 0);
             TileCoord distantGoal = new TileCoord(19, 19);
-            PathfindingRequest request = createRequest(start, distantGoal, false);
+            PathfindingRequest request = createRequest(start, distantGoal);
 
             PathResult result = pathfinder.findPath(gameState, request);
 

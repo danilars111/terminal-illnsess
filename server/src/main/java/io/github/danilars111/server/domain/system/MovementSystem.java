@@ -35,22 +35,6 @@ public class MovementSystem implements GameSystem {
         this.defaultCooldownTicks = Math.max(0, defaultCooldownTicks);
     }
 
-    public MovementSystem(GameWorld world, int defaultCooldownTicks, boolean allowDiagonalMovement) {
-        this(
-                new MovementRuleService(
-                        world,
-                        allowDiagonalMovement
-                                ? MovementRuleService.DiagonalMode.PERMISSIVE
-                                : MovementRuleService.DiagonalMode.NONE
-                ),
-                defaultCooldownTicks
-        );
-    }
-
-    public MovementSystem(GameWorld world, int defaultCooldownTicks) {
-        this(new MovementRuleService(world), defaultCooldownTicks);
-    }
-
     @Override
     public void update(GameState gameState, long tick) {
         Set<EntityId> intendingEntities = gameState.getEntitiesWith(MoveIntentComponent.class);

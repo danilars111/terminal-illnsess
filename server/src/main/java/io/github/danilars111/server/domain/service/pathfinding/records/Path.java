@@ -27,6 +27,8 @@ public record Path(
         return new Path(List.of(destination), List.of(0L), 0L);
     }
 
+    public boolean contains(TileCoord coord) { return waypoints.contains(coord); }
+
     public boolean isEmpty() {
         return waypoints.isEmpty();
     }
