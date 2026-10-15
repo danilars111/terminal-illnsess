@@ -9,6 +9,8 @@ import io.github.danilars111.server.domain.component.movement.MoveIntentComponen
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
+import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
@@ -70,8 +72,6 @@ public class MovementIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        engine = new GameEngine();
-
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
         tileRepo.replaceAll(Map.of(grass.id(), grass));
 
@@ -88,6 +88,9 @@ public class MovementIntegrationTest {
         LevelGrid grid = new LevelGrid(LEVEL_ID, WORLD_SIZE, WORLD_SIZE, tiles);
         world.registerLevel(grid);
 
+        GameState gameState = new GameState(new EntityManager(), new SpatialIndex(), world);
+        engine = new GameEngine(gameState);
+
         MovementRuleService movementRuleService = new MovementRuleService(world);
 
         cooldownSystem = new CooldownSystem();
@@ -99,7 +102,7 @@ public class MovementIntegrationTest {
         CommandDispatcher dispatcher = new CommandDispatcher();
         dispatcher.registerHandler(MoveCommand.class, moveCmd -> {
             EntityId targetId = new EntityId(moveCmd.entityId());
-            engine.getGameState().addComponent(
+            engine.getGameState().entityManager().addComponent(
                     targetId,
                     new MoveIntentComponent(moveCmd.deltaX(), moveCmd.deltaY(), engine.getCurrentTick())
             );
@@ -109,11 +112,10 @@ public class MovementIntegrationTest {
     }
 
     private EntityId spawnPlayer(int x, int y) {
-        EntityId entity = engine.getGameState().createEntity();
+        EntityId entity = engine.getGameState().entityManager().createEntity();
         PositionComponent pos = new PositionComponent(LEVEL_ID, x, y);
-        engine.getGameState().addComponent(entity, pos);
-        engine.getGameState().addComponent(entity, TraversalComponent.of(TraversalMode.WALKING));
-        engine.getGameState().getSpatialIndex().updateEntity(entity, pos, null);
+        engine.getGameState().entityManager().addComponent(entity, pos);
+        engine.getGameState().entityManager().addComponent(entity, TraversalComponent.of(TraversalMode.WALKING));
         return entity;
     }
 
@@ -125,7 +127,7 @@ public class MovementIntegrationTest {
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, -1));
         engine.tick();
 
-        PositionComponent position = engine.getGameState()
+        PositionComponent position = engine.getGameState().entityManager()
                 .getComponent(entity, PositionComponent.class)
                 .orElseThrow();
 
@@ -142,7 +144,7 @@ public class MovementIntegrationTest {
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, 0));
         engine.tick();
 
-        PositionComponent posAfterFirstMove = engine.getGameState()
+        PositionComponent posAfterFirstMove = engine.getGameState().entityManager()
                 .getComponent(entity, PositionComponent.class)
                 .orElseThrow();
         assertEquals(11, posAfterFirstMove.getX());
@@ -152,7 +154,7 @@ public class MovementIntegrationTest {
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, 0));
         engine.tick();
 
-        PositionComponent posBlocked = engine.getGameState()
+        PositionComponent posBlocked = engine.getGameState().entityManager()
                 .getComponent(entity, PositionComponent.class)
                 .orElseThrow();
 
@@ -167,7 +169,7 @@ public class MovementIntegrationTest {
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, 0));
         engine.tick();
 
-        PositionComponent posFinal = engine.getGameState()
+        PositionComponent posFinal = engine.getGameState().entityManager()
                 .getComponent(entity, PositionComponent.class)
                 .orElseThrow();
         assertEquals(12, posFinal.getX());
@@ -179,19 +181,18 @@ public class MovementIntegrationTest {
     void multiTileEntityMovesAndUpdatesSpatialIndex() {
         EntityId boss = spawnPlayer(5, 5);
         FootprintComponent footprintComp = FootprintComponent.rectangle(2, 2);
-        engine.getGameState().addComponent(boss, footprintComp);
-        engine.getGameState().getSpatialIndex().updateEntity(boss, new PositionComponent(LEVEL_ID, 5, 5), footprintComp);
+        engine.getGameState().entityManager().addComponent(boss, footprintComp);
 
         engine.enqueueCommand(new MoveCommand(boss.value(), 1, 0));
         engine.tick();
 
-        PositionComponent pos = engine.getGameState()
+        PositionComponent pos = engine.getGameState().entityManager()
                 .getComponent(boss, PositionComponent.class)
                 .orElseThrow();
         assertEquals(6, pos.getX());
         assertEquals(5, pos.getY());
 
-        SpatialIndex spatialIndex = engine.getGameState().getSpatialIndex();
+        SpatialIndex spatialIndex = engine.getGameState().spatialIndex();
         Set<TileCoord> occupied = spatialIndex.getFootprintOf(boss);
         assertEquals(4, occupied.size());
         assertTrue(occupied.contains(new TileCoord(6, 5)));
@@ -208,16 +209,15 @@ public class MovementIntegrationTest {
     void moveCommandBlockedByDynamicColliderEntity() {
         EntityId mover = spawnPlayer(10, 10);
 
-        EntityId obstacle = engine.getGameState().createEntity();
+        EntityId obstacle = engine.getGameState().entityManager().createEntity();
         PositionComponent obsPos = new PositionComponent(LEVEL_ID, 11, 10);
-        engine.getGameState().addComponent(obstacle, obsPos);
-        engine.getGameState().addComponent(obstacle, new ColliderComponent());
-        engine.getGameState().getSpatialIndex().updateEntity(obstacle, obsPos, null);
+        engine.getGameState().entityManager().addComponent(obstacle, obsPos);
+        engine.getGameState().entityManager().addComponent(obstacle, new ColliderComponent());
 
         engine.enqueueCommand(new MoveCommand(mover.value(), 1, 0));
         engine.tick();
 
-        PositionComponent pos = engine.getGameState()
+        PositionComponent pos = engine.getGameState().entityManager()
                 .getComponent(mover, PositionComponent.class)
                 .orElseThrow();
 
@@ -230,25 +230,24 @@ public class MovementIntegrationTest {
     void destroyingObstacleUnblocksMovementPath() {
         EntityId mover = spawnPlayer(10, 10);
 
-        EntityId obstacle = engine.getGameState().createEntity();
+        EntityId obstacle = engine.getGameState().entityManager().createEntity();
         PositionComponent obsPos = new PositionComponent(LEVEL_ID, 11, 10);
-        engine.getGameState().addComponent(obstacle, obsPos);
-        engine.getGameState().addComponent(obstacle, new ColliderComponent());
-        engine.getGameState().getSpatialIndex().updateEntity(obstacle, obsPos, null);
+        engine.getGameState().entityManager().addComponent(obstacle, obsPos);
+        engine.getGameState().entityManager().addComponent(obstacle, new ColliderComponent());
 
         // Tick 1: Move blocked
         engine.enqueueCommand(new MoveCommand(mover.value(), 1, 0));
         engine.tick();
-        assertEquals(10, engine.getGameState().getComponent(mover, PositionComponent.class).orElseThrow().getX());
+        assertEquals(10, engine.getGameState().entityManager().getComponent(mover, PositionComponent.class).orElseThrow().getX());
 
-        // Destroy the obstacle (GameState clears it from SpatialIndex)
-        engine.getGameState().destroyEntity(obstacle);
+        // Destroy the obstacle (EntityManager listener clears it from SpatialIndex)
+        engine.getGameState().entityManager().destroyEntity(obstacle);
 
         // Tick 2: Move now succeeds
         engine.enqueueCommand(new MoveCommand(mover.value(), 1, 0));
         engine.tick();
 
-        PositionComponent posAfterDestroy = engine.getGameState()
+        PositionComponent posAfterDestroy = engine.getGameState().entityManager()
                 .getComponent(mover, PositionComponent.class)
                 .orElseThrow();
         assertEquals(11, posAfterDestroy.getX(), "Path must open once obstacle is destroyed");
@@ -258,22 +257,20 @@ public class MovementIntegrationTest {
     @Test
     @DisplayName("End-to-end: Player with NOCLIP bypasses dynamic colliders via MoveCommand")
     void noClipPlayerPhasesThroughDynamicColliders() {
-        EntityId cheater = engine.getGameState().createEntity();
+        EntityId cheater = engine.getGameState().entityManager().createEntity();
         PositionComponent cheaterPos = new PositionComponent(LEVEL_ID, 10, 10);
-        engine.getGameState().addComponent(cheater, cheaterPos);
-        engine.getGameState().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
-        engine.getGameState().getSpatialIndex().updateEntity(cheater, cheaterPos, null);
+        engine.getGameState().entityManager().addComponent(cheater, cheaterPos);
+        engine.getGameState().entityManager().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
 
-        EntityId solidWall = engine.getGameState().createEntity();
+        EntityId solidWall = engine.getGameState().entityManager().createEntity();
         PositionComponent wallPos = new PositionComponent(LEVEL_ID, 11, 10);
-        engine.getGameState().addComponent(solidWall, wallPos);
-        engine.getGameState().addComponent(solidWall, new ColliderComponent());
-        engine.getGameState().getSpatialIndex().updateEntity(solidWall, wallPos, null);
+        engine.getGameState().entityManager().addComponent(solidWall, wallPos);
+        engine.getGameState().entityManager().addComponent(solidWall, new ColliderComponent());
 
         engine.enqueueCommand(new MoveCommand(cheater.value(), 1, 0));
         engine.tick();
 
-        PositionComponent pos = engine.getGameState()
+        PositionComponent pos = engine.getGameState().entityManager()
                 .getComponent(cheater, PositionComponent.class)
                 .orElseThrow();
 
@@ -285,20 +282,18 @@ public class MovementIntegrationTest {
     @DisplayName("End-to-end: Two entities attempting to step into the same tile resolve deterministically")
     void competingEntitiesResolveMovementDeterministically() {
         EntityId p1 = spawnPlayer(9, 10);
-        engine.getGameState().addComponent(p1, new ColliderComponent());
-        engine.getGameState().getSpatialIndex().updateEntity(p1, new PositionComponent(LEVEL_ID, 9, 10), null);
+        engine.getGameState().entityManager().addComponent(p1, new ColliderComponent());
 
         EntityId p2 = spawnPlayer(11, 10);
-        engine.getGameState().addComponent(p2, new ColliderComponent());
-        engine.getGameState().getSpatialIndex().updateEntity(p2, new PositionComponent(LEVEL_ID, 11, 10), null);
+        engine.getGameState().entityManager().addComponent(p2, new ColliderComponent());
 
         engine.enqueueCommand(new MoveCommand(p1.value(), 1, 0));
         engine.enqueueCommand(new MoveCommand(p2.value(), -1, 0));
 
         engine.tick();
 
-        PositionComponent p1Pos = engine.getGameState().getComponent(p1, PositionComponent.class).orElseThrow();
-        PositionComponent p2Pos = engine.getGameState().getComponent(p2, PositionComponent.class).orElseThrow();
+        PositionComponent p1Pos = engine.getGameState().entityManager().getComponent(p1, PositionComponent.class).orElseThrow();
+        PositionComponent p2Pos = engine.getGameState().entityManager().getComponent(p2, PositionComponent.class).orElseThrow();
 
         assertEquals(10, p1Pos.getX(), "Lower EntityId wins contested tile");
         assertEquals(10, p1Pos.getY());

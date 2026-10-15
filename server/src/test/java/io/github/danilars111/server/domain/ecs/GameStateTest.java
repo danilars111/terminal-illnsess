@@ -1,170 +1,151 @@
 package io.github.danilars111.server.domain.ecs;
 
-import io.github.danilars111.server.domain.component.interfaces.Component;
+import io.github.danilars111.contracts.definition.world.TileDefinition;
+import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
+import io.github.danilars111.server.domain.component.FootprintComponent;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
+import io.github.danilars111.server.domain.data.DefinitionRepository;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
-import org.junit.jupiter.api.BeforeAll;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
+import io.github.danilars111.server.domain.service.indices.TilePalette;
+import io.github.danilars111.server.domain.world.LevelGrid;
+import io.github.danilars111.server.domain.world.World;
+import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class GameStateTest {
+class GameStateTest {
 
+    private static final String LEVEL_ID = "test_level";
+
+    private EntityManager entityManager;
+    private SpatialIndex spatialIndex;
+    private World world;
     private GameState gameState;
-
-    private record PositionComponent(int x, int y) implements Component {}
-    private record HealthComponent(int current, int max) implements Component {}
-
-    @BeforeAll
-    static void enableLogging() {
-        Logger rootLogger = Logger.getLogger("");
-        rootLogger.setLevel(Level.SEVERE); // Enables System.Logger Level.DEBUG
-
-        for (var handler : rootLogger.getHandlers()) {
-            if (handler instanceof ConsoleHandler) {
-                handler.setLevel(Level.SEVERE);
-            }
-        }
-    }
 
     @BeforeEach
     void setUp() {
-        gameState = new GameState();
+        entityManager = new EntityManager();
+        spatialIndex = new SpatialIndex();
+
+        TileDefinition floor = new TileDefinition("floor", "Floor", Set.of(TraversalMode.WALKING), Set.of());
+        DefinitionRepository<TileDefinition> repo = new DefinitionRepository<>();
+        repo.replaceAll(Map.of(floor.id(), floor));
+
+        TileIndex tileIndex = new TileIndex();
+        short floorId = tileIndex.register(floor.id());
+
+        TilePalette palette = new TilePalette();
+        palette.rebuild(tileIndex, repo);
+
+        world = new World(palette, tileIndex);
+        world.registerLevel(new LevelGrid(LEVEL_ID, 10, 10, new short[100]));
+
+        gameState = new GameState(entityManager, spatialIndex, world);
     }
 
-    @Test
-    @DisplayName("Creating an entity generates incrementing sequential EntityIds")
-    void createEntityGeneratesSequentialIds() {
-        EntityId id1 = gameState.createEntity();
-        EntityId id2 = gameState.createEntity();
-        EntityId id3 = gameState.createEntity();
+    @Nested
+    @DisplayName("Aggregate Construction & Invariants")
+    class InvariantsTests {
 
-        assertNotNull(id1);
-        assertNotNull(id2);
-        assertNotNull(id3);
+        @Test
+        @DisplayName("Rejects null constructor arguments")
+        void rejectsNullConstructorArguments() {
+            assertThrows(NullPointerException.class, () -> new GameState(null, spatialIndex, world));
+            assertThrows(NullPointerException.class, () -> new GameState(entityManager, null, world));
+            assertThrows(NullPointerException.class, () -> new GameState(entityManager, spatialIndex, null));
+        }
 
-        assertEquals(0L, id1.value());
-        assertEquals(1L, id2.value());
-        assertEquals(2L, id3.value());
+        @Test
+        @DisplayName("Exposes constituent domain aggregates")
+        void exposesAggregates() {
+            assertSame(entityManager, gameState.entityManager());
+            assertSame(spatialIndex, gameState.spatialIndex());
+            assertSame(world, gameState.world());
+        }
     }
 
-    @Test
-    @DisplayName("Can attach, retrieve and remove components from an entity")
-    void componentLifecycle() {
-        EntityId entityId = gameState.createEntity();
-        PositionComponent position = new PositionComponent(5, 10);
+    @Nested
+    @DisplayName("Automatic Spatial Lifecycle Synchronization")
+    class SpatialSyncTests {
 
-        gameState.addComponent(entityId, position);
+        @Test
+        @DisplayName("Adding PositionComponent automatically indexes entity in SpatialIndex")
+        void addingPositionUpdatesSpatialIndex() {
+            EntityId id = entityManager.createEntity();
+            TileCoord target = new TileCoord(3, 4);
 
-        Optional<PositionComponent> retrievedPosition = gameState.getComponent(entityId, PositionComponent.class);
-        assertTrue(retrievedPosition.isPresent());
-        assertEquals(position, retrievedPosition.get());
+            entityManager.addComponent(id, new PositionComponent(LEVEL_ID, target));
 
-        gameState.removeComponent(entityId, PositionComponent.class);
-        Optional<PositionComponent> removedPosition = gameState.getComponent(entityId, PositionComponent.class);
-        assertFalse(removedPosition.isPresent());
-    }
+            Set<EntityId> found = spatialIndex.getEntitiesAt(LEVEL_ID, target);
+            assertEquals(Set.of(id), found);
+        }
 
-    @Test
-    @DisplayName("Can Query Entities possessing matching component types")
-    void queryEntitiesWithMatchingComponents() {
-        EntityId warrior = gameState.createEntity();
-        EntityId ghost = gameState.createEntity();
-        EntityId rock = gameState.createEntity();
+        @Test
+        @DisplayName("Updating PositionComponent moves entity in SpatialIndex")
+        void updatingPositionMovesEntityInSpatialIndex() {
+            EntityId id = entityManager.createEntity();
+            TileCoord from = new TileCoord(2, 2);
+            TileCoord to = new TileCoord(2, 3);
 
-        gameState.addComponent(warrior, new PositionComponent(1, 1));
-        gameState.addComponent(warrior, new HealthComponent(100, 100));
+            entityManager.addComponent(id, new PositionComponent(LEVEL_ID, from));
+            assertEquals(Set.of(id), spatialIndex.getEntitiesAt(LEVEL_ID, from));
 
-        gameState.addComponent(ghost, new HealthComponent(50, 50));
-        gameState.addComponent(rock, new PositionComponent(10, 10));
+            entityManager.addComponent(id, new PositionComponent(LEVEL_ID, to));
 
-        Set<EntityId> withPosition = gameState.getEntitiesWith(PositionComponent.class);
-        assertEquals(Set.of(warrior, rock), withPosition);
+            assertTrue(spatialIndex.getEntitiesAt(LEVEL_ID, from).isEmpty(), "Old tile should be cleared");
+            assertEquals(Set.of(id), spatialIndex.getEntitiesAt(LEVEL_ID, to), "New tile should contain entity");
+        }
 
-        Set<EntityId> withHealth = gameState.getEntitiesWith(HealthComponent.class);
-        assertEquals(Set.of(warrior, ghost), withHealth);
+        @Test
+        @DisplayName("Adding FootprintComponent expands entity presence across multiple tiles")
+        void addingFootprintExpandsSpatialOccupancy() {
+            EntityId boss = entityManager.createEntity();
+            TileCoord origin = new TileCoord(5, 5);
 
-        Set<EntityId> withPositionAndHealth = gameState.getEntitiesWith(PositionComponent.class, HealthComponent.class);
-        assertEquals(Set.of(warrior), withPositionAndHealth);
-    }
+            entityManager.addComponent(boss, new PositionComponent(LEVEL_ID, origin));
+            entityManager.addComponent(boss, FootprintComponent.rectangle(2, 2));
 
-    @Test
-    @DisplayName("Destroying an entity cleans up all attached components")
-    void destroyEntityCleansUp() {
-        EntityId entity = gameState.createEntity();
-        gameState.addComponent(entity, new PositionComponent(1, 1));
+            assertEquals(Set.of(boss), spatialIndex.getEntitiesAt(LEVEL_ID, new TileCoord(5, 5)));
+            assertEquals(Set.of(boss), spatialIndex.getEntitiesAt(LEVEL_ID, new TileCoord(6, 5)));
+            assertEquals(Set.of(boss), spatialIndex.getEntitiesAt(LEVEL_ID, new TileCoord(5, 6)));
+            assertEquals(Set.of(boss), spatialIndex.getEntitiesAt(LEVEL_ID, new TileCoord(6, 6)));
+        }
 
-        gameState.destroyEntity(entity);
+        @Test
+        @DisplayName("Removing PositionComponent clears entity from SpatialIndex")
+        void removingPositionClearsSpatialIndex() {
+            EntityId id = entityManager.createEntity();
+            TileCoord coord = new TileCoord(1, 1);
 
-        assertFalse(gameState.getComponent(entity, PositionComponent.class).isPresent());
-        assertTrue(gameState.getEntitiesWith(PositionComponent.class).isEmpty());
-    }
+            entityManager.addComponent(id, new PositionComponent(LEVEL_ID, coord));
+            assertFalse(spatialIndex.getEntitiesAt(LEVEL_ID, coord).isEmpty());
 
-    @Test
-    @DisplayName("Throws IllegalArgumentException when adding component to nonexisting entity")
-    void rejectsAddingComponentToNonexistingEntity() {
-        EntityId invalid = new EntityId(999);
-        assertThrows(IllegalArgumentException.class, () ->
-                gameState.addComponent(invalid, new PositionComponent(0, 0))
-        );
-    }
+            entityManager.removeComponent(id, PositionComponent.class);
 
-    @Test
-    @DisplayName("Destroying an entity recycles its ID on subsequent creation")
-    void recyclesDestroyedEntityIds() {
-        EntityId first = gameState.createEntity();
-        EntityId second = gameState.createEntity();
+            assertTrue(spatialIndex.getEntitiesAt(LEVEL_ID, coord).isEmpty());
+        }
 
-        assertEquals(0, first.value());
-        assertEquals(1, second.value());
+        @Test
+        @DisplayName("Destroying entity via EntityManager automatically evicts it from SpatialIndex")
+        void destroyingEntityEvictsFromSpatialIndex() {
+            EntityId id = entityManager.createEntity();
+            TileCoord coord = new TileCoord(7, 8);
 
-        gameState.destroyEntity(first);
+            entityManager.addComponent(id, new PositionComponent(LEVEL_ID, coord));
+            assertEquals(Set.of(id), spatialIndex.getEntitiesAt(LEVEL_ID, coord));
 
-        EntityId recycled = gameState.createEntity();
-        assertEquals(0, recycled.value());
+            entityManager.destroyEntity(id);
 
-        EntityId nextNew = gameState.createEntity();
-        assertEquals(2, nextNew.value());
-    }
-
-    @Test
-    @DisplayName("getEntitiesWith reflects component additions, removals, and entity destruction")
-    void getEntitiesWithReflectsLifecycle() {
-        EntityId e1 = gameState.createEntity();
-        EntityId e2 = gameState.createEntity();
-
-        PositionComponent pos = new PositionComponent(5, 5);
-        gameState.addComponent(e1, pos);
-        gameState.addComponent(e2, pos);
-
-        assertEquals(Set.of(e1, e2), gameState.getEntitiesWith(PositionComponent.class));
-
-        gameState.removeComponent(e1, PositionComponent.class);
-        assertEquals(Set.of(e2), gameState.getEntitiesWith(PositionComponent.class));
-
-        gameState.destroyEntity(e2);
-        assertTrue(gameState.getEntitiesWith(PositionComponent.class).isEmpty());
-    }
-
-    @Test
-    @DisplayName("Recycled entity does not inherit previous entity components in index")
-    void recycledEntityStartsCleanInIndex() {
-        EntityId initial = gameState.createEntity();
-        gameState.addComponent(initial, new PositionComponent(1, 1));
-        assertEquals(Set.of(initial), gameState.getEntitiesWith(PositionComponent.class));
-
-        gameState.destroyEntity(initial);
-        assertTrue(gameState.getEntitiesWith(PositionComponent.class).isEmpty());
-
-        EntityId recycled = gameState.createEntity();
-        assertEquals(initial.value(), recycled.value());
-        assertTrue(gameState.getEntitiesWith(PositionComponent.class).isEmpty());
+            assertTrue(spatialIndex.getEntitiesAt(LEVEL_ID, coord).isEmpty());
+        }
     }
 }

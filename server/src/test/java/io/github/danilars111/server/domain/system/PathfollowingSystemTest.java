@@ -1,23 +1,31 @@
 package io.github.danilars111.server.domain.system;
 
+import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
 import io.github.danilars111.server.domain.component.movement.PathFollowComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
+import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
+import io.github.danilars111.server.domain.service.indices.TileIndex;
+import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathValidationResult;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathValidator;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.Pathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.records.Path;
+import io.github.danilars111.server.domain.world.World;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -32,8 +40,16 @@ class PathfollowingSystemTest {
 
     @BeforeEach
     void setUp() {
-        gameState = new GameState();
-        entity = gameState.createEntity();
+        DefinitionRepository<?> emptyRepo = new DefinitionRepository<>();
+        emptyRepo.replaceAll(Map.of());
+
+        TileIndex tileIndex = new TileIndex();
+        TilePalette palette = new TilePalette();
+        palette.rebuild(tileIndex, (DefinitionRepository<TileDefinition>) emptyRepo);
+
+        World world = new World(palette, tileIndex);
+        gameState = new GameState(new EntityManager(), new SpatialIndex(), world);
+        entity = gameState.entityManager().createEntity();
     }
 
     @Test
@@ -42,13 +58,13 @@ class PathfollowingSystemTest {
         TileCoord start = new TileCoord(0, 0);
         TileCoord next = new TileCoord(1, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
         PathFollowComponent follow = new PathFollowComponent(
                 List.of(start, next),
                 List.of(0L, 1000L),
                 1
         );
-        gameState.addComponent(entity, follow);
+        gameState.entityManager().addComponent(entity, follow);
 
         PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), start);
@@ -56,7 +72,7 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
         system.update(gameState, 10L);
 
-        Optional<MoveIntentComponent> intentOpt = gameState.getComponent(entity, MoveIntentComponent.class);
+        Optional<MoveIntentComponent> intentOpt = gameState.entityManager().getComponent(entity, MoveIntentComponent.class);
         assertTrue(intentOpt.isPresent(), "MoveIntentComponent should be emitted");
 
         MoveIntentComponent intent = intentOpt.get();
@@ -72,7 +88,7 @@ class PathfollowingSystemTest {
         TileCoord step2 = new TileCoord(1, 1);
 
         // Entity has physically arrived at step1 on the current level
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, step1));
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, step1));
 
         // PathFollowComponent was targeting step1 (index 1)
         PathFollowComponent follow = new PathFollowComponent(
@@ -80,7 +96,7 @@ class PathfollowingSystemTest {
                 List.of(0L, 1000L, 1000L),
                 1
         );
-        gameState.addComponent(entity, follow);
+        gameState.entityManager().addComponent(entity, follow);
 
         PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), step1);
@@ -93,7 +109,7 @@ class PathfollowingSystemTest {
         assertEquals(step2, follow.getCurrentTarget().orElseThrow());
 
         // Intent should aim towards step2 from step1: dx = 0, dy = 1
-        MoveIntentComponent intent = gameState.getComponent(entity, MoveIntentComponent.class).orElseThrow();
+        MoveIntentComponent intent = gameState.entityManager().getComponent(entity, MoveIntentComponent.class).orElseThrow();
         assertEquals(0, intent.deltaX());
         assertEquals(1, intent.deltaY());
     }
@@ -103,13 +119,13 @@ class PathfollowingSystemTest {
     void cleansUpWhenPathCompletes() {
         TileCoord goal = new TileCoord(2, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, goal));
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, goal));
         PathFollowComponent follow = new PathFollowComponent(
                 List.of(new TileCoord(1, 0), goal),
                 List.of(0L, 1000L),
                 1 // target is goal, which entity is already at
         );
-        gameState.addComponent(entity, follow);
+        gameState.entityManager().addComponent(entity, follow);
 
         PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), goal);
@@ -117,9 +133,9 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
         system.update(gameState, 1L);
 
-        assertTrue(gameState.getComponent(entity, PathFollowComponent.class).isEmpty(),
+        assertTrue(gameState.entityManager().getComponent(entity, PathFollowComponent.class).isEmpty(),
                 "PathFollowComponent should be removed upon path completion");
-        assertTrue(gameState.getComponent(entity, MoveIntentComponent.class).isEmpty(),
+        assertTrue(gameState.entityManager().getComponent(entity, MoveIntentComponent.class).isEmpty(),
                 "No MoveIntent should be emitted when complete");
     }
 
@@ -129,12 +145,12 @@ class PathfollowingSystemTest {
         TileCoord start = new TileCoord(0, 0);
         TileCoord next = new TileCoord(1, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
-        gameState.addComponent(entity, new PathFollowComponent(List.of(start, next), List.of(0L, 1000L), 1));
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new PathFollowComponent(List.of(start, next), List.of(0L, 1000L), 1));
 
         // Pre-existing pending intent
         MoveIntentComponent existingIntent = new MoveIntentComponent(0, 1, 5L);
-        gameState.addComponent(entity, existingIntent);
+        gameState.entityManager().addComponent(entity, existingIntent);
 
         PathValidator alwaysValid = (id, pf, fp) -> new PathValidationResult.Valid();
         Pathfinder dummyFinder = (gs, req) -> new PathResult.Failure(PathResult.FailureReason.UNREACHABLE, Optional.empty(), start);
@@ -142,7 +158,7 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(alwaysValid, dummyFinder, 1);
         system.update(gameState, 6L);
 
-        MoveIntentComponent intent = gameState.getComponent(entity, MoveIntentComponent.class).orElseThrow();
+        MoveIntentComponent intent = gameState.entityManager().getComponent(entity, MoveIntentComponent.class).orElseThrow();
         assertSame(existingIntent, intent, "Existing intent must not be replaced");
     }
 
@@ -154,9 +170,9 @@ class PathfollowingSystemTest {
         TileCoord detourTile = new TileCoord(0, 1);
         TileCoord goal = new TileCoord(2, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
-        gameState.addComponent(entity, new TraversalComponent(Set.of(TraversalMode.WALKING)));
-        gameState.addComponent(entity, new PathFollowComponent(
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new TraversalComponent(Set.of(TraversalMode.WALKING)));
+        gameState.entityManager().addComponent(entity, new PathFollowComponent(
                 List.of(start, blockedTile, goal),
                 List.of(0L, 1000L, 1000L),
                 1
@@ -171,7 +187,7 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(blockedValidator, detourFinder, 1);
         system.update(gameState, 1L);
 
-        PathFollowComponent newFollow = gameState.getComponent(entity, PathFollowComponent.class).orElseThrow();
+        PathFollowComponent newFollow = gameState.entityManager().getComponent(entity, PathFollowComponent.class).orElseThrow();
         assertEquals(detourTile, newFollow.getCurrentTarget().orElseThrow(),
                 "PathFollowComponent should be replaced with detour route");
     }
@@ -183,8 +199,8 @@ class PathfollowingSystemTest {
         TileCoord blockedTile = new TileCoord(1, 0);
         TileCoord goal = new TileCoord(2, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
-        gameState.addComponent(entity, new PathFollowComponent(
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new PathFollowComponent(
                 List.of(start, blockedTile, goal),
                 List.of(0L, 1000L, 1000L),
                 1
@@ -196,9 +212,9 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(blockedValidator, failingFinder, 1);
         system.update(gameState, 1L);
 
-        assertTrue(gameState.getComponent(entity, PathFollowComponent.class).isEmpty(),
+        assertTrue(gameState.entityManager().getComponent(entity, PathFollowComponent.class).isEmpty(),
                 "PathFollowComponent should be dropped when trapped");
-        assertTrue(gameState.getComponent(entity, MoveIntentComponent.class).isEmpty(),
+        assertTrue(gameState.entityManager().getComponent(entity, MoveIntentComponent.class).isEmpty(),
                 "No intent should be emitted when route is impassable");
     }
 
@@ -210,8 +226,8 @@ class PathfollowingSystemTest {
         TileCoord detourTile = new TileCoord(0, 1);
         TileCoord goal = new TileCoord(2, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
-        gameState.addComponent(entity, new PathFollowComponent(
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new PathFollowComponent(
                 List.of(start, inflatedTile, goal),
                 List.of(0L, 1000L, 1000L),
                 1
@@ -226,7 +242,7 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(inflatedValidator, detourFinder, 1);
         system.update(gameState, 1L);
 
-        PathFollowComponent newFollow = gameState.getComponent(entity, PathFollowComponent.class).orElseThrow();
+        PathFollowComponent newFollow = gameState.entityManager().getComponent(entity, PathFollowComponent.class).orElseThrow();
         assertEquals(detourTile, newFollow.getCurrentTarget().orElseThrow());
     }
 
@@ -237,8 +253,8 @@ class PathfollowingSystemTest {
         TileCoord inflatedTile = new TileCoord(1, 0);
         TileCoord goal = new TileCoord(2, 0);
 
-        gameState.addComponent(entity, new PositionComponent(LEVEL_ID, start));
-        gameState.addComponent(entity, new PathFollowComponent(
+        gameState.entityManager().addComponent(entity, new PositionComponent(LEVEL_ID, start));
+        gameState.entityManager().addComponent(entity, new PathFollowComponent(
                 List.of(start, inflatedTile, goal),
                 List.of(0L, 1000L, 1000L),
                 1
@@ -252,10 +268,10 @@ class PathfollowingSystemTest {
         PathfollowingSystem system = new PathfollowingSystem(inflatedValidator, failingFinder, 1);
         system.update(gameState, 1L);
 
-        assertTrue(gameState.getComponent(entity, PathFollowComponent.class).isPresent(),
+        assertTrue(gameState.entityManager().getComponent(entity, PathFollowComponent.class).isPresent(),
                 "Must continue on original path if no better alternative exists");
 
-        MoveIntentComponent intent = gameState.getComponent(entity, MoveIntentComponent.class).orElseThrow();
+        MoveIntentComponent intent = gameState.entityManager().getComponent(entity, MoveIntentComponent.class).orElseThrow();
         assertEquals(1, intent.deltaX());
         assertEquals(0, intent.deltaY());
     }

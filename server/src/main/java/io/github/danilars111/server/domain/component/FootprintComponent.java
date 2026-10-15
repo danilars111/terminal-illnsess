@@ -1,8 +1,6 @@
 package io.github.danilars111.server.domain.component;
 
 import io.github.danilars111.server.domain.component.interfaces.Component;
-import io.github.danilars111.server.domain.ecs.GameState;
-import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.util.*;
@@ -260,9 +258,5 @@ public record FootprintComponent(Set<TileOffset> relativeOffsets) implements Com
             coords.add(new TileCoord(originX + offset.dx(), originY + offset.dy()));
         }
         return coords;
-    }
-
-    public static FootprintComponent getFootprintFrom(GameState state, EntityId id) {
-        return state.getComponent(id, FootprintComponent.class).orElse(FootprintComponent.singleTile());
     }
 }

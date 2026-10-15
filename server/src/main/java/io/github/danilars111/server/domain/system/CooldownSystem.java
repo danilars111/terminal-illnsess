@@ -8,16 +8,18 @@ import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import java.util.Set;
 
 public class CooldownSystem implements GameSystem {
+
+    @Override
     public void update(GameState state, long tick) {
-        Set<EntityId> entities = state.getEntitiesWith(CooldownComponent.class);
-        if(entities.isEmpty()) {
+        Set<EntityId> entities = state.entityManager().getEntitiesWith(CooldownComponent.class);
+        if (entities.isEmpty()) {
             return;
         }
 
-        for(EntityId entityId : entities) {
-            state.getComponent(entityId, CooldownComponent.class).ifPresent((cooldownComponent) ->{
+        for (EntityId entityId : entities) {
+            state.entityManager().getComponent(entityId, CooldownComponent.class).ifPresent(cooldownComponent -> {
                 CooldownComponent updated = cooldownComponent.tick();
-                state.addComponent(entityId, updated);
+                state.entityManager().addComponent(entityId, updated);
             });
         }
     }

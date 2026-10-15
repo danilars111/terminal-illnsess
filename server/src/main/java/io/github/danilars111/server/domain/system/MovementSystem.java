@@ -36,7 +36,7 @@ public class MovementSystem implements GameSystem {
 
     @Override
     public void update(GameState gameState, long tick) {
-        Set<EntityId> intendingEntities = gameState.getEntitiesWith(MoveIntentComponent.class);
+        Set<EntityId> intendingEntities = gameState.entityManager().getEntitiesWith(MoveIntentComponent.class);
         if (intendingEntities.isEmpty()) {
             return;
         }
@@ -45,13 +45,13 @@ public class MovementSystem implements GameSystem {
         List<EntityId> sortedEntities = intendingEntities.stream()
                 .sorted(Comparator
                         .comparingLong((EntityId id) ->
-                                gameState.getComponent(id, MoveIntentComponent.class)
+                                gameState.entityManager().getComponent(id, MoveIntentComponent.class)
                                         .orElseThrow().requestedTick())
                         .thenComparing(EntityId::value))
                 .toList();
 
         for (EntityId entityId : sortedEntities) {
-            MoveIntentComponent intent = gameState.getComponent(entityId, MoveIntentComponent.class)
+            MoveIntentComponent intent = gameState.entityManager().getComponent(entityId, MoveIntentComponent.class)
                     .orElse(null);
             if (intent == null) {
                 continue;
@@ -60,7 +60,7 @@ public class MovementSystem implements GameSystem {
             try {
                 processEntityMove(gameState, entityId, intent, tick);
             } finally {
-                gameState.removeComponent(entityId, MoveIntentComponent.class);
+                gameState.entityManager().removeComponent(entityId, MoveIntentComponent.class);
             }
         }
     }
@@ -69,13 +69,13 @@ public class MovementSystem implements GameSystem {
         int dx = intent.deltaX();
         int dy = intent.deltaY();
 
-        PositionComponent currentPos = gameState.getComponent(entityId, PositionComponent.class).orElse(null);
+        PositionComponent currentPos = gameState.entityManager().getComponent(entityId, PositionComponent.class).orElse(null);
         if (currentPos == null) {
             return;
         }
 
         // 1. Validate Cooldown
-        CooldownComponent cooldown = gameState.getComponent(entityId, CooldownComponent.class)
+        CooldownComponent cooldown = gameState.entityManager().getComponent(entityId, CooldownComponent.class)
                 .orElseGet(CooldownComponent::empty);
 
         if (cooldown.isOnCooldown(COOLDOWN_KEY)) {
@@ -93,9 +93,9 @@ public class MovementSystem implements GameSystem {
             return;
         }
 
-        // 3. Commit position (GameState update triggers SpatialIndex sync)
+        // 3. Commit position (SpatialIndex updates automatically via listener)
         PositionComponent newPosition = currentPos.translate(dx, dy);
-        gameState.addComponent(entityId, newPosition);
+        gameState.entityManager().addComponent(entityId, newPosition);
 
         // 4. Cooldown application using fixed-point integer rounding
         boolean isDiagonal = (dx != 0 && dy != 0);
@@ -103,7 +103,7 @@ public class MovementSystem implements GameSystem {
             int appliedCooldown = isDiagonal
                     ? (int) ((defaultCooldownTicks * DIAGONAL_SCALE_NUMERATOR + (SCALE_DENOMINATOR / 2)) / SCALE_DENOMINATOR)
                     : defaultCooldownTicks;
-            gameState.addComponent(entityId, cooldown.withCooldown(COOLDOWN_KEY, appliedCooldown));
+            gameState.entityManager().addComponent(entityId, cooldown.withCooldown(COOLDOWN_KEY, appliedCooldown));
         }
 
         LOGGER.log(Level.DEBUG, "Entity {0} moved from {1} to {2} on level {3} at tick {4}",

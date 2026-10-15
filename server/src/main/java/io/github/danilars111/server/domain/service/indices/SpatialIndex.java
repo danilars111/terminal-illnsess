@@ -2,9 +2,12 @@ package io.github.danilars111.server.domain.service.indices;
 
 import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
+import io.github.danilars111.server.domain.ecs.EntityManager;
+import io.github.danilars111.server.domain.ecs.listener.ComponentChangeListener;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
+import java.awt.event.ComponentListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -123,5 +126,39 @@ public class SpatialIndex {
     public void clear() {
         tileToEntities.clear();
         entityToTiles.clear();
+    }
+
+    public void bindTo(EntityManager entityManager) {
+        Objects.requireNonNull(entityManager, "entityManager cannot be null");
+
+        // Position updates
+        entityManager.addComponentListener(PositionComponent.class, new ComponentChangeListener<PositionComponent>() {
+            @Override
+            public void onComponentAddedOrReplaced(EntityId entityId, PositionComponent position) {
+                FootprintComponent footprint = entityManager.getComponent(entityId, FootprintComponent.class)
+                        .orElse(FootprintComponent.singleTile());
+                updateEntity(entityId, position, footprint);
+            }
+            @Override
+            public void onComponentRemoved(EntityId entityId, PositionComponent position) {
+                remove(entityId);
+            }
+        });
+
+        entityManager.addComponentListener(FootprintComponent.class, new ComponentChangeListener<FootprintComponent>() {
+            @Override
+            public void onComponentAddedOrReplaced(EntityId entityId, FootprintComponent footprint) {
+                entityManager.getComponent(entityId, PositionComponent.class)
+                        .ifPresent(positionComponent -> updateEntity(entityId, positionComponent, footprint));
+            }
+            @Override
+            public void onComponentRemoved(EntityId entityId, FootprintComponent component) {
+                entityManager.getComponent(entityId, PositionComponent.class)
+                        .ifPresent(positionComponent -> updateEntity(entityId, positionComponent, component));
+            }
+        });
+
+        entityManager.addEntityDestroyedListener(this::remove);
+
     }
 }

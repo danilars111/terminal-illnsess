@@ -2,8 +2,6 @@ package io.github.danilars111.server.domain.component.movement;
 
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.interfaces.Component;
-import io.github.danilars111.server.domain.ecs.GameState;
-import io.github.danilars111.server.domain.ecs.records.EntityId;
 
 import java.util.HashSet;
 import java.util.Objects;
@@ -40,9 +38,5 @@ public record TraversalComponent(Set<TraversalMode> activeModes) implements Comp
         Set<TraversalMode> newModes = new HashSet<>(activeModes);
         newModes.remove(mode);
         return new TraversalComponent(newModes);
-    }
-
-    public static Set<TraversalMode> getActiveModesFrom(GameState state, EntityId id) {
-        return state.getComponent(id, TraversalComponent.class).map(TraversalComponent::activeModes).orElse(Set.of());
     }
 }

@@ -1,6 +1,5 @@
 package io.github.danilars111.server.domain.service.pathfinding.algorithm;
 
-import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
@@ -79,8 +78,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         TileCoord goal = req.goal();
         EntityId entityId = req.entityId();
 
-        // Resolve level ID either from request (if supported) or entity's PositionComponent
-        String levelId = state.getComponent(entityId, PositionComponent.class)
+        String levelId = state.entityManager().getComponent(entityId, PositionComponent.class)
                 .map(PositionComponent::levelId)
                 .orElseThrow(() -> new IllegalArgumentException("Entity " + entityId + " has no PositionComponent to resolve level"));
 
@@ -118,7 +116,6 @@ public class FastestPathAStarPathfinder implements Pathfinder {
                 continue;
             }
 
-            // Track closest node for partial-path recovery on failure
             long hDist = calculateHeuristic(current.coord, goal);
             if (hDist < minRemainingHeuristic) {
                 minRemainingHeuristic = hDist;
@@ -128,7 +125,6 @@ public class FastestPathAStarPathfinder implements Pathfinder {
             expandNeighbors(entityId, levelId, current, goal, openSet, gScores, cameFrom, stepsCostTaken);
         }
 
-        // Search space exhausted without touching the destination
         Path partial = reconstructPath(cameFrom, stepsCostTaken, closestNode, gScores.getOrDefault(closestNode, 0L));
         return new PathResult.Failure(
                 PathResult.FailureReason.UNREACHABLE,
@@ -137,10 +133,6 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         );
     }
 
-    /**
-     * Admissible heuristic assuming the engine's theoretical maximum speed floor:
-     * 1 tick (TICK_SCALE) per cardinal step, SQRT_2 for diagonal.
-     */
     private long calculateHeuristic(TileCoord start, TileCoord goal) {
         int dx = Math.abs(start.getX() - goal.getX());
         int dy = Math.abs(start.getY() - goal.getY());
@@ -190,7 +182,6 @@ public class FastestPathAStarPathfinder implements Pathfinder {
             int nx = current.coord.getX() + dir[0];
             int ny = current.coord.getY() + dir[1];
 
-            // World Bounds Check: Discard off-grid coordinates for the active level
             if (!world.isWithinBounds(levelId, nx, ny)) {
                 continue;
             }
@@ -199,7 +190,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
 
             long stepCost = costCalculator.calculateStepCost(entityId, current.coord, next);
             if (stepCost == EngineTime.INFINITE || stepCost <= 0L) {
-                continue; // Blocked or impassable
+                continue;
             }
 
             long tentativeG = current.gCost + stepCost;

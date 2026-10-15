@@ -22,16 +22,24 @@ public class StandardStepCostCalculator implements StepCostCalculator {
 
     public StandardStepCostCalculator(
             GameState gameState,
-            MovementRuleService movementRuleService
+            MovementRuleService movementRuleService,
+            StepCostModifierIndex modifierIndex
     ) {
         this.gameState = Objects.requireNonNull(gameState, "GameState cannot be null");
         this.movementRuleService = Objects.requireNonNull(movementRuleService, "MovementRuleService cannot be null");
-        this.modifierIndex = gameState.getStepCostModifierIndex();
+        this.modifierIndex = Objects.requireNonNull(modifierIndex, "StepCostModifierIndex cannot be null");
+    }
+
+    public StandardStepCostCalculator(
+            GameState gameState,
+            MovementRuleService movementRuleService
+    ) {
+        this(gameState, movementRuleService, new StepCostModifierIndex());
     }
 
     @Override
     public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {
-        String levelId = gameState.getComponent(entityId, PositionComponent.class)
+        String levelId = gameState.entityManager().getComponent(entityId, PositionComponent.class)
                 .map(PositionComponent::levelId)
                 .orElse(null);
 
@@ -49,7 +57,8 @@ public class StandardStepCostCalculator implements StepCostCalculator {
         long totalCost = isDiagonal ? EngineTime.SQRT_2 : EngineTime.TICK_SCALE;
 
         // 3. Inspect entity-specific modifiers from ECS
-        PathfindingModifierComponent modifierComp = gameState.getComponent(entityId, PathfindingModifierComponent.class)
+        PathfindingModifierComponent modifierComp = gameState.entityManager()
+                .getComponent(entityId, PathfindingModifierComponent.class)
                 .orElse(null);
 
         if (modifierComp == null || modifierComp.activeModifiers().isEmpty()) {
