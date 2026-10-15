@@ -40,7 +40,7 @@ public class MovementRuleService {
      * Checks if a single tile is blocked on a specific level by terrain or dynamic colliders.
      */
     public boolean isTileBlocked(GameState state, String levelId, TileCoord tileCoord, EntityId mover) {
-        Set<TraversalMode> modes = TraversalComponent.getActiveModesFrom(state, mover);
+        Set<TraversalMode> modes = getActiveModes(state, mover);
 
         if (modes.contains(TraversalMode.NOCLIP)) {
             return false;
@@ -58,10 +58,11 @@ public class MovementRuleService {
         }
 
         // Dynamic collider check scoped to the active level
-        return state.getSpatialIndex().getEntitiesAt(levelId, tileCoord).stream()
+        return state.spatialIndex().getEntitiesAt(levelId, tileCoord).stream()
                 .filter(otherId -> !otherId.equals(mover))
-                .anyMatch(otherId -> state.getComponent(otherId, ColliderComponent.class).isPresent());
+                .anyMatch(otherId -> state.entityManager().getComponent(otherId, ColliderComponent.class).isPresent());
     }
+
     private boolean isTileBlocked(GameState state, String levelId, int x, int y, EntityId mover) {
         return isTileBlocked(state, levelId, new TileCoord(x, y), mover);
     }
@@ -93,7 +94,7 @@ public class MovementRuleService {
             return true;
         }
 
-        FootprintComponent footprint = FootprintComponent.getFootprintFrom(state, mover);
+        FootprintComponent footprint = getFootprint(state, mover);
 
         for (TileCoord coord : footprint.getOccupiedCoords(fromCoord)) {
             boolean flankABlocked = isTileBlocked(state, levelId, coord.getX() + dx, coord.getY(), mover);
@@ -127,7 +128,7 @@ public class MovementRuleService {
             return false;
         }
 
-        Set<TraversalMode> modes = TraversalComponent.getActiveModesFrom(state, mover);
+        Set<TraversalMode> modes = getActiveModes(state, mover);
         if (modes.contains(TraversalMode.NOCLIP)) {
             return true;
         }
@@ -152,18 +153,18 @@ public class MovementRuleService {
             EntityId mover,
             TileCoord toCoord
     ) {
-        PositionComponent pos = state.getComponent(mover, PositionComponent.class)
+        PositionComponent pos = state.entityManager().getComponent(mover, PositionComponent.class)
                 .orElseThrow(() -> new IllegalArgumentException("Mover entity " + mover + " has no PositionComponent"));
         return canTraverseStep(state, mover, pos.levelId(), pos.getTileCoord(), toCoord);
     }
 
     public boolean isFootprintBlocked(GameState state, EntityId mover, String levelId, TileCoord anchorTile) {
-        Set<TraversalMode> modes = TraversalComponent.getActiveModesFrom(state, mover);
+        Set<TraversalMode> modes = getActiveModes(state, mover);
         if (modes.contains(TraversalMode.NOCLIP)) {
             return false;
         }
 
-        FootprintComponent footprint = FootprintComponent.getFootprintFrom(state, mover);
+        FootprintComponent footprint = getFootprint(state, mover);
         List<TileCoord> targetCoords = footprint.getOccupiedCoords(anchorTile);
         for (TileCoord coord : targetCoords) {
             if (isTileBlocked(state, levelId, coord, mover)) {
@@ -179,5 +180,18 @@ public class MovementRuleService {
 
     public DiagonalMode getDiagonalMode() {
         return diagonalMode;
+    }
+
+    // --- Private ECS Resolution Helpers ---
+
+    private Set<TraversalMode> getActiveModes(GameState state, EntityId entityId) {
+        return state.entityManager().getComponent(entityId, TraversalComponent.class)
+                .map(TraversalComponent::activeModes)
+                .orElse(Set.of());
+    }
+
+    private FootprintComponent getFootprint(GameState state, EntityId entityId) {
+        return state.entityManager().getComponent(entityId, FootprintComponent.class)
+                .orElseGet(FootprintComponent::singleTile);
     }
 }

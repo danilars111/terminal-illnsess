@@ -4,8 +4,10 @@ import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
@@ -41,8 +43,6 @@ class FastestPathAStarPathfinderTest {
 
     @BeforeEach
     void setUp() {
-        gameState = new GameState();
-        mover = gameState.createEntity();
         defaultTile = new TileDefinition("grass", "Grass", Set.of(TraversalMode.WALKING), Set.of());
 
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
@@ -54,8 +54,13 @@ class FastestPathAStarPathfinderTest {
         tilePalette = new TilePalette();
         tilePalette.rebuild(tileIndex, tileRepo);
 
+        World initialWorld = createUniformWorld(5, 5);
+        gameState = new GameState(new EntityManager(), new SpatialIndex(), initialWorld);
+
+        mover = gameState.entityManager().createEntity();
+
         // Pathfinder resolves the entity's level via PositionComponent
-        gameState.addComponent(mover, new PositionComponent(DEFAULT_LEVEL_ID, 0, 0));
+        gameState.entityManager().addComponent(mover, new PositionComponent(DEFAULT_LEVEL_ID, 0, 0));
     }
 
     private World createUniformWorld(int width, int height) {
@@ -127,6 +132,7 @@ class FastestPathAStarPathfinderTest {
             );
             assertEquals(expectedWaypoints, path.waypoints());
             assertEquals(3 * stepCost, path.totalCostUnits());
+
             assertEquals(12L, path.totalDurationTicksCeil());
         }
     }

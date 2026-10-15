@@ -7,8 +7,10 @@ import io.github.danilars111.server.domain.component.movement.ColliderComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.world.LevelGrid;
@@ -54,9 +56,6 @@ public class MovementRuleServiceTest {
 
     @BeforeEach
     void setUp() {
-        state = new GameState();
-        mover = state.createEntity();
-
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
         tileRepo.replaceAll(Map.of(
                 grass.id(), grass,
@@ -79,9 +78,12 @@ public class MovementRuleServiceTest {
         levelGrid = new LevelGrid(LEVEL_ID, WORLD_SIZE, WORLD_SIZE, initialTiles);
         world.registerLevel(levelGrid);
 
-        state.addComponent(mover, new PositionComponent(LEVEL_ID, 5, 5));
-        state.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
-        state.addComponent(mover, FootprintComponent.singleTile());
+        state = new GameState(new EntityManager(), new SpatialIndex(), world);
+
+        mover = state.entityManager().createEntity();
+        state.entityManager().addComponent(mover, new PositionComponent(LEVEL_ID, 5, 5));
+        state.entityManager().addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
+        state.entityManager().addComponent(mover, FootprintComponent.singleTile());
     }
 
     private void setTileImpassable(TileCoord tile) {
@@ -164,9 +166,9 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("Rejects movement occupied by another entity with a ColliderComponent")
         void rejectsStepOntoDynamicCollider() {
-            EntityId rock = state.createEntity();
-            state.addComponent(rock, new PositionComponent(LEVEL_ID, 6, 5));
-            state.addComponent(rock, new ColliderComponent());
+            EntityId rock = state.entityManager().createEntity();
+            state.entityManager().addComponent(rock, new PositionComponent(LEVEL_ID, 6, 5));
+            state.entityManager().addComponent(rock, new ColliderComponent());
 
             MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
             assertFalse(service.canTraverseStep(state, mover, LEVEL_ID, new TileCoord(5, 5), new TileCoord(6, 5)));
@@ -175,8 +177,8 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("Allows movement onto an entity without a ColliderComponent")
         void allowsMovementOntoDynamicNonCollider() {
-            EntityId itemDrop = state.createEntity();
-            state.addComponent(itemDrop, new PositionComponent(LEVEL_ID, 6, 5));
+            EntityId itemDrop = state.entityManager().createEntity();
+            state.entityManager().addComponent(itemDrop, new PositionComponent(LEVEL_ID, 6, 5));
 
             MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
             assertTrue(service.canTraverseStep(state, mover, LEVEL_ID, new TileCoord(5, 5), new TileCoord(6, 5)));
@@ -186,8 +188,8 @@ public class MovementRuleServiceTest {
     @Test
     @DisplayName("Ignores self when checking colliders (entity does not collide with its own body)")
     void entityDoesNotCollideWithSelf() {
-        state.addComponent(mover, FootprintComponent.rectangle(3, 3));
-        state.addComponent(mover, new ColliderComponent());
+        state.entityManager().addComponent(mover, FootprintComponent.rectangle(3, 3));
+        state.entityManager().addComponent(mover, new ColliderComponent());
         MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
 
         assertTrue(service.canTraverseStep(state, mover, LEVEL_ID, new TileCoord(5, 5), new TileCoord(6, 5)));
@@ -266,16 +268,16 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("NOCLIP ignores terrain and colliders during canTraverseStep")
         void noclipBypassesAllObstacles() {
-            state.addComponent(mover, TraversalComponent.of(TraversalMode.NOCLIP));
+            state.entityManager().addComponent(mover, TraversalComponent.of(TraversalMode.NOCLIP));
 
             TileCoord target = new TileCoord(6, 6);
             setTileImpassable(target);
             setTileImpassable(new TileCoord(6, 5));
             setTileImpassable(new TileCoord(5, 6));
 
-            EntityId rock = state.createEntity();
-            state.addComponent(rock, new PositionComponent(LEVEL_ID, target));
-            state.addComponent(rock, new ColliderComponent());
+            EntityId rock = state.entityManager().createEntity();
+            state.entityManager().addComponent(rock, new PositionComponent(LEVEL_ID, target));
+            state.entityManager().addComponent(rock, new ColliderComponent());
 
             MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.NONE);
 
@@ -285,7 +287,7 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("isFootprintBlocked returns false for NOCLIP entities on blocked tiles")
         void isFootprintBlockedReturnsFalseForNoClip() {
-            state.addComponent(mover, TraversalComponent.of(TraversalMode.NOCLIP));
+            state.entityManager().addComponent(mover, TraversalComponent.of(TraversalMode.NOCLIP));
             TileCoord target = new TileCoord(6, 6);
             setTileImpassable(target);
 
@@ -301,7 +303,7 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("isFootprintBlocked returns true if any tile in the footprint is impassable")
         void detectsImpassableSubTileInFootprint() {
-            state.addComponent(mover, FootprintComponent.rectangle(2, 2));
+            state.entityManager().addComponent(mover, FootprintComponent.rectangle(2, 2));
             MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
 
             assertFalse(service.isFootprintBlocked(state, mover, LEVEL_ID, new TileCoord(5, 5)), "Clear footprint");
@@ -313,7 +315,7 @@ public class MovementRuleServiceTest {
         @Test
         @DisplayName("canTraverseStep evaluates passability across the entire footprint at destination")
         void verifiesWholeFootprintAtDestination() {
-            state.addComponent(mover, FootprintComponent.rectangle(2, 2));
+            state.entityManager().addComponent(mover, FootprintComponent.rectangle(2, 2));
             MovementRuleService service = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
 
             TileCoord from = new TileCoord(5, 5);

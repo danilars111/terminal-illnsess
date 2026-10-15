@@ -4,12 +4,11 @@ import io.github.danilars111.contracts.command.interfaces.GameCommand;
 import io.github.danilars111.contracts.event.TickEvent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.engine.enums.GameSpeed;
-import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.port.out.interfaces.GameStatePublisher;
+import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -31,10 +30,6 @@ public class GameEngine {
     private final CommandQueue commandQueue = new CommandQueue();
     private Consumer<GameCommand> commandHandler = _ -> {};
     private GameStatePublisher publisher = _ -> {};
-
-    public GameEngine() {
-        this(new GameState());
-    }
 
     public GameEngine(GameState gameState) {
         this.gameState = Objects.requireNonNull(gameState, "GameState cannot be null");

@@ -9,8 +9,10 @@ import io.github.danilars111.server.domain.component.ai.PathfindingModifierCompo
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.indices.TilePalette;
@@ -47,12 +49,6 @@ class StandardStepCostCalculatorTest {
 
     @BeforeEach
     void setUp() {
-        gameState = new GameState();
-        mover = gameState.createEntity();
-        gameState.addComponent(mover, new PositionComponent(LEVEL_ID, 5, 5));
-        gameState.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
-        gameState.addComponent(mover, FootprintComponent.singleTile());
-
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
         tileRepo.replaceAll(Map.of(walkableTile.id(), walkableTile));
 
@@ -68,9 +64,16 @@ class StandardStepCostCalculatorTest {
         LevelGrid grid = new LevelGrid(LEVEL_ID, 10, 10, tiles);
         world.registerLevel(grid);
 
+        gameState = new GameState(new EntityManager(), new SpatialIndex(), world);
+
+        mover = gameState.entityManager().createEntity();
+        gameState.entityManager().addComponent(mover, new PositionComponent(LEVEL_ID, 5, 5));
+        gameState.entityManager().addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
+        gameState.entityManager().addComponent(mover, FootprintComponent.singleTile());
+
         movementRuleService = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
-        modifierIndex = gameState.getStepCostModifierIndex();
-        calculator = new StandardStepCostCalculator(gameState, movementRuleService);
+        modifierIndex = new StepCostModifierIndex();
+        calculator = new StandardStepCostCalculator(gameState, movementRuleService, modifierIndex);
     }
 
     @Test
@@ -120,7 +123,7 @@ class StandardStepCostCalculatorTest {
     @Test
     @DisplayName("Safely ignores modifier IDs in component that are not present in ModifierIndex")
     void ignoresUnregisteredModifierDefinitions() {
-        gameState.addComponent(mover, PathfindingModifierComponent.of("unknown_mod_1", "unknown_mod_2"));
+        gameState.entityManager().addComponent(mover, PathfindingModifierComponent.of("unknown_mod_1", "unknown_mod_2"));
 
         TileCoord from = new TileCoord(5, 5);
         TileCoord to = new TileCoord(5, 6);

@@ -1,13 +1,9 @@
 package io.github.danilars111.server.domain.system;
 
-import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
-import io.github.danilars111.server.domain.component.CooldownComponent;
 import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
-import io.github.danilars111.server.domain.component.movement.MovementProgressComponent;
 import io.github.danilars111.server.domain.component.movement.PathFollowComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
-import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
@@ -16,12 +12,10 @@ import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathVa
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.Pathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.records.PathfindingRequest;
 import io.github.danilars111.server.domain.system.interfaces.GameSystem;
-import io.github.danilars111.server.domain.time.EngineTime;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 public class PathfollowingSystem implements GameSystem {
 
@@ -41,13 +35,14 @@ public class PathfollowingSystem implements GameSystem {
 
     @Override
     public void update(GameState gameState, long tick) {
-        for (EntityId entityId : gameState.getEntitiesWith(PathFollowComponent.class, PositionComponent.class)) {
+        for (EntityId entityId : gameState.entityManager().getEntitiesWith(PathFollowComponent.class, PositionComponent.class)) {
             processEntity(gameState, entityId, tick);
         }
     }
+
     private void processEntity(GameState gameState, EntityId entityId, long tick) {
-        Optional<PathFollowComponent> followOpt = gameState.getComponent(entityId, PathFollowComponent.class);
-        Optional<PositionComponent> posOpt = gameState.getComponent(entityId, PositionComponent.class);
+        Optional<PathFollowComponent> followOpt = gameState.entityManager().getComponent(entityId, PathFollowComponent.class);
+        Optional<PositionComponent> posOpt = gameState.entityManager().getComponent(entityId, PositionComponent.class);
         if (followOpt.isEmpty() || posOpt.isEmpty()) {
             return;
         }
@@ -63,17 +58,17 @@ public class PathfollowingSystem implements GameSystem {
 
         // Completion Check
         if (follow.isComplete()) {
-            gameState.removeComponent(entityId, PathFollowComponent.class);
+            gameState.entityManager().removeComponent(entityId, PathFollowComponent.class);
             return;
         }
 
         // Do not overwrite if an intent is already pending this tick
-        if (gameState.getComponent(entityId, MoveIntentComponent.class).isPresent()) {
+        if (gameState.entityManager().getComponent(entityId, MoveIntentComponent.class).isPresent()) {
             return;
         }
 
-        FootprintComponent footprint = gameState.getComponent(entityId, FootprintComponent.class)
-                .orElse(FootprintComponent.singleTile());
+        FootprintComponent footprint = gameState.entityManager().getComponent(entityId, FootprintComponent.class)
+                .orElseGet(FootprintComponent::singleTile);
 
         // Lookahead path validation
         PathValidationResult validation = pathValidator.validate(entityId, follow, defaultLookahead);
@@ -81,7 +76,7 @@ public class PathfollowingSystem implements GameSystem {
         switch (validation) {
             case PathValidationResult.Blocked blocked -> {
                 if (!attemptRepath(gameState, entityId, follow, footprint, currentPos.getTileCoord())) {
-                    gameState.removeComponent(entityId, PathFollowComponent.class);
+                    gameState.entityManager().removeComponent(entityId, PathFollowComponent.class);
                 }
                 return;
             }
@@ -101,8 +96,8 @@ public class PathfollowingSystem implements GameSystem {
         int dx = nextTile.getX() - currentPos.getX();
         int dy = nextTile.getY() - currentPos.getY();
 
-        if(dx != 0 || dy != 0) {
-            gameState.addComponent(entityId, new MoveIntentComponent(dx, dy, tick));
+        if (dx != 0 || dy != 0) {
+            gameState.entityManager().addComponent(entityId, new MoveIntentComponent(dx, dy, tick));
         }
     }
 
@@ -124,13 +119,13 @@ public class PathfollowingSystem implements GameSystem {
         );
         PathResult result = pathfinder.findPath(gameState, request);
 
-        if(result instanceof  PathResult.Success success && !success.path().isEmpty()) {
+        if (result instanceof PathResult.Success success && !success.path().isEmpty()) {
             PathFollowComponent detour = new PathFollowComponent(
                     success.path().waypoints(),
                     success.path().stepCostUnits(),
                     1
             );
-            gameState.addComponent(entityId, detour);
+            gameState.entityManager().addComponent(entityId, detour);
             return true;
         }
         return false;

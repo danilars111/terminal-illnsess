@@ -9,8 +9,10 @@ import io.github.danilars111.server.domain.component.movement.MoveIntentComponen
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
@@ -82,8 +84,6 @@ public class MovementSystemTest {
 
     @BeforeEach
     void setUp() {
-        gameState = new GameState();
-
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
         tileRepo.replaceAll(Map.of(
                 grass.id(), grass,
@@ -115,34 +115,33 @@ public class MovementSystemTest {
         LevelGrid levelGrid = new LevelGrid(LEVEL_ID, 3, 3, grid);
         world.registerLevel(levelGrid);
 
+        gameState = new GameState(new EntityManager(), new SpatialIndex(), world);
+
         movementRuleService = new MovementRuleService(world);
         movementSystem = new MovementSystem(movementRuleService, BASE_COOLDOWN);
     }
 
     private EntityId createWalkingEntity(int x, int y) {
-        EntityId entity = gameState.createEntity();
+        EntityId entity = gameState.entityManager().createEntity();
         PositionComponent pos = new PositionComponent(LEVEL_ID, x, y);
-        gameState.addComponent(entity, pos);
-        gameState.addComponent(entity, TraversalComponent.of(TraversalMode.WALKING));
-        gameState.getSpatialIndex().updateEntity(entity, pos, null);
+        gameState.entityManager().addComponent(entity, pos);
+        gameState.entityManager().addComponent(entity, TraversalComponent.of(TraversalMode.WALKING));
         return entity;
     }
 
     private EntityId createFlyingEntity(int x, int y) {
-        EntityId entity = gameState.createEntity();
+        EntityId entity = gameState.entityManager().createEntity();
         PositionComponent pos = new PositionComponent(LEVEL_ID, x, y);
-        gameState.addComponent(entity, pos);
-        gameState.addComponent(entity, TraversalComponent.of(TraversalMode.FLYING));
-        gameState.getSpatialIndex().updateEntity(entity, pos, null);
+        gameState.entityManager().addComponent(entity, pos);
+        gameState.entityManager().addComponent(entity, TraversalComponent.of(TraversalMode.FLYING));
         return entity;
     }
 
     private EntityId createSwimmingEntity(int x, int y) {
-        EntityId entity = gameState.createEntity();
+        EntityId entity = gameState.entityManager().createEntity();
         PositionComponent pos = new PositionComponent(LEVEL_ID, x, y);
-        gameState.addComponent(entity, pos);
-        gameState.addComponent(entity, TraversalComponent.of(TraversalMode.SWIMMING));
-        gameState.getSpatialIndex().updateEntity(entity, pos, null);
+        gameState.entityManager().addComponent(entity, pos);
+        gameState.entityManager().addComponent(entity, TraversalComponent.of(TraversalMode.SWIMMING));
         return entity;
     }
 
@@ -161,17 +160,17 @@ public class MovementSystemTest {
         @DisplayName("Successfully moves 1 tile orthogonally, consumes intent and applies base cooldown")
         void movesOrthogonallyAndAppliesCooldown() {
             EntityId id = createWalkingEntity(0, 0);
-            gameState.addComponent(id, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(1, pos.getX());
             assertEquals(0, pos.getY());
 
-            assertTrue(gameState.getComponent(id, MoveIntentComponent.class).isEmpty());
+            assertTrue(gameState.entityManager().getComponent(id, MoveIntentComponent.class).isEmpty());
 
-            CooldownComponent cd = gameState.getComponent(id, CooldownComponent.class).orElseThrow();
+            CooldownComponent cd = gameState.entityManager().getComponent(id, CooldownComponent.class).orElseThrow();
             assertEquals(BASE_COOLDOWN, cd.getCooldown(MovementSystem.COOLDOWN_KEY));
         }
 
@@ -179,26 +178,26 @@ public class MovementSystemTest {
         @DisplayName("Rejects move when movement cooldown is active")
         void rejectsMoveWhenOnCooldown() {
             EntityId id = createWalkingEntity(0, 0);
-            gameState.addComponent(id, CooldownComponent.empty().withCooldown(MovementSystem.COOLDOWN_KEY, 3));
-            gameState.addComponent(id, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(id, CooldownComponent.empty().withCooldown(MovementSystem.COOLDOWN_KEY, 3));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
-            assertTrue(gameState.getComponent(id, MoveIntentComponent.class).isEmpty());
+            assertTrue(gameState.entityManager().getComponent(id, MoveIntentComponent.class).isEmpty());
         }
 
         @Test
         @DisplayName("Rejects moves exceeding 1 tile step distance")
         void rejectsStepLargerThanOneTile() {
             EntityId id = createWalkingEntity(0, 0);
-            gameState.addComponent(id, new MoveIntentComponent(2, 0, 10L));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(2, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -212,15 +211,15 @@ public class MovementSystemTest {
         @DisplayName("Diagonal move scales cooldown by ~1.414x")
         void appliesScaledCooldownForDiagonalMove() {
             EntityId id = createWalkingEntity(0, 1);
-            gameState.addComponent(id, new MoveIntentComponent(1, 1, 10L)); // (1, 2) is grass
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(1, 1, 10L)); // (1, 2) is grass
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(1, pos.getX());
             assertEquals(2, pos.getY());
 
-            CooldownComponent cd = gameState.getComponent(id, CooldownComponent.class).orElseThrow();
+            CooldownComponent cd = gameState.entityManager().getComponent(id, CooldownComponent.class).orElseThrow();
             assertEquals(DIAGONAL_COOLDOWN, cd.getCooldown(MovementSystem.COOLDOWN_KEY));
         }
 
@@ -228,11 +227,11 @@ public class MovementSystemTest {
         @DisplayName("Permissive cornering: Allows diagonal when one cardinal side is blocked and one is open")
         void allowsDiagonalWhenOneSideBlocked() {
             EntityId walker = createWalkingEntity(0, 1);
-            gameState.addComponent(walker, new MoveIntentComponent(1, 1, 10L));
+            gameState.entityManager().addComponent(walker, new MoveIntentComponent(1, 1, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(walker, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(walker, PositionComponent.class).orElseThrow();
             assertEquals(1, pos.getX());
             assertEquals(2, pos.getY());
         }
@@ -245,20 +244,20 @@ public class MovementSystemTest {
                     wallId, grassId
             };
             World slitWorld = createCustomWorld("slit_level", 2, 2, slitTiles);
+            GameState slitState = new GameState(new EntityManager(), new SpatialIndex(), slitWorld);
             MovementRuleService localRuleService = new MovementRuleService(slitWorld);
             MovementSystem slitSystem = new MovementSystem(localRuleService, BASE_COOLDOWN);
 
-            EntityId id = gameState.createEntity();
+            EntityId id = slitState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent("slit_level", 0, 0);
-            gameState.addComponent(id, pos);
-            gameState.addComponent(id, TraversalComponent.of(TraversalMode.WALKING));
-            gameState.getSpatialIndex().updateEntity(id, pos, null);
+            slitState.entityManager().addComponent(id, pos);
+            slitState.entityManager().addComponent(id, TraversalComponent.of(TraversalMode.WALKING));
 
-            gameState.addComponent(id, new MoveIntentComponent(1, 1, 10L));
+            slitState.entityManager().addComponent(id, new MoveIntentComponent(1, 1, 10L));
 
-            slitSystem.update(gameState, 10L);
+            slitSystem.update(slitState, 10L);
 
-            PositionComponent resultPos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent resultPos = slitState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, resultPos.getX());
             assertEquals(0, resultPos.getY());
         }
@@ -272,48 +271,47 @@ public class MovementSystemTest {
         @DisplayName("Walker is blocked by water, swimmer can cross water")
         void respectsWalkingAndSwimmingDistinction() {
             EntityId walker = createWalkingEntity(0, 1);
-            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L)); // (1, 1) is water
+            gameState.entityManager().addComponent(walker, new MoveIntentComponent(1, 0, 10L)); // (1, 1) is water
 
             movementSystem.update(gameState, 10L);
-            assertEquals(0, gameState.getComponent(walker, PositionComponent.class).orElseThrow().getX());
+            assertEquals(0, gameState.entityManager().getComponent(walker, PositionComponent.class).orElseThrow().getX());
 
             EntityId swimmer = createSwimmingEntity(0, 1);
-            gameState.addComponent(swimmer, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(swimmer, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
-            assertEquals(1, gameState.getComponent(swimmer, PositionComponent.class).orElseThrow().getX());
+            assertEquals(1, gameState.entityManager().getComponent(swimmer, PositionComponent.class).orElseThrow().getX());
         }
 
         @Test
         @DisplayName("Only flying entities can traverse mountain tiles")
         void respectsFlyingOnlyMountainTiles() {
             EntityId walker = createWalkingEntity(1, 2);
-            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(walker, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
-            assertEquals(1, gameState.getComponent(walker, PositionComponent.class).orElseThrow().getX());
+            assertEquals(1, gameState.entityManager().getComponent(walker, PositionComponent.class).orElseThrow().getX());
 
             EntityId flyer = createFlyingEntity(1, 2);
-            gameState.addComponent(flyer, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(flyer, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
-            assertEquals(2, gameState.getComponent(flyer, PositionComponent.class).orElseThrow().getX());
+            assertEquals(2, gameState.entityManager().getComponent(flyer, PositionComponent.class).orElseThrow().getX());
         }
 
         @Test
         @DisplayName("Entity with empty TraversalComponent (immobilized/rooted) cannot move")
         void immobilizedEntityCannotMove() {
-            EntityId id = gameState.createEntity();
+            EntityId id = gameState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent(LEVEL_ID, 0, 0);
-            gameState.addComponent(id, pos);
-            gameState.addComponent(id, TraversalComponent.empty());
-            gameState.getSpatialIndex().updateEntity(id, pos, null);
+            gameState.entityManager().addComponent(id, pos);
+            gameState.entityManager().addComponent(id, TraversalComponent.empty());
 
-            gameState.addComponent(id, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent result = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent result = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, result.getX());
             assertEquals(0, result.getY());
         }
@@ -321,16 +319,15 @@ public class MovementSystemTest {
         @Test
         @DisplayName("Entity without TraversalComponent (static object) cannot move")
         void staticEntityCannotMove() {
-            EntityId id = gameState.createEntity();
+            EntityId id = gameState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent(LEVEL_ID, 0, 0);
-            gameState.addComponent(id, pos);
-            gameState.getSpatialIndex().updateEntity(id, pos, null);
+            gameState.entityManager().addComponent(id, pos);
 
-            gameState.addComponent(id, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent result = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent result = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, result.getX());
             assertEquals(0, result.getY());
         }
@@ -339,11 +336,11 @@ public class MovementSystemTest {
         @DisplayName("Entity cannot step outside world boundaries")
         void blocksOutOfBoundsMovement() {
             EntityId id = createWalkingEntity(0, 0);
-            gameState.addComponent(id, new MoveIntentComponent(-1, 0, 10L));
+            gameState.entityManager().addComponent(id, new MoveIntentComponent(-1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(id, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(id, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -368,8 +365,8 @@ public class MovementSystemTest {
             EntityId entityLate = createWalkingEntity(0, 0);
             EntityId entityEarly = createWalkingEntity(0, 2);
 
-            gameState.addComponent(entityLate, new MoveIntentComponent(1, 0, 12L));
-            gameState.addComponent(entityEarly, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(entityLate, new MoveIntentComponent(1, 0, 12L));
+            gameState.entityManager().addComponent(entityEarly, new MoveIntentComponent(1, 0, 10L));
 
             trackingSystem.update(gameState, 15L);
 
@@ -386,18 +383,17 @@ public class MovementSystemTest {
         void movesMultiTileFootprintSuccessfully() {
             EntityId flyer = createFlyingEntity(0, 0);
             FootprintComponent footprintComp = FootprintComponent.rectangle(2, 2);
-            gameState.addComponent(flyer, footprintComp);
-            gameState.getSpatialIndex().updateEntity(flyer, new PositionComponent(LEVEL_ID, 0, 0), footprintComp);
+            gameState.entityManager().addComponent(flyer, footprintComp);
 
-            gameState.addComponent(flyer, new MoveIntentComponent(0, 1, 10L));
+            gameState.entityManager().addComponent(flyer, new MoveIntentComponent(0, 1, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(flyer, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(flyer, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(1, pos.getY());
 
-            Set<TileCoord> footprint = gameState.getSpatialIndex().getFootprintOf(flyer);
+            Set<TileCoord> footprint = gameState.spatialIndex().getFootprintOf(flyer);
             assertEquals(4, footprint.size());
             assertTrue(footprint.contains(new TileCoord(0, 1)));
             assertTrue(footprint.contains(new TileCoord(1, 1)));
@@ -410,14 +406,13 @@ public class MovementSystemTest {
         void rejectsMoveIfAnyFootprintCellIsImpassable() {
             EntityId walker = createWalkingEntity(0, 0);
             FootprintComponent footprintComp = FootprintComponent.rectangle(2, 1);
-            gameState.addComponent(walker, footprintComp);
-            gameState.getSpatialIndex().updateEntity(walker, new PositionComponent(LEVEL_ID, 0, 0), footprintComp);
+            gameState.entityManager().addComponent(walker, footprintComp);
 
-            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(walker, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(walker, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(walker, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -427,24 +422,24 @@ public class MovementSystemTest {
         void selfExclusionAllowsOverlappingMovement() {
             short[] openRow = new short[]{grassId, grassId, grassId, grassId};
             World linearWorld = createCustomWorld("linear_level", 4, 1, openRow);
+            GameState linearState = new GameState(new EntityManager(), new SpatialIndex(), linearWorld);
             MovementRuleService localRuleService = new MovementRuleService(linearWorld);
             MovementSystem openMovementSystem = new MovementSystem(localRuleService, BASE_COOLDOWN);
 
-            EntityId walker = gameState.createEntity();
+            EntityId walker = linearState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent("linear_level", 0, 0);
             FootprintComponent footprintComp = FootprintComponent.rectangle(2, 1);
 
-            gameState.addComponent(walker, pos);
-            gameState.addComponent(walker, TraversalComponent.of(TraversalMode.WALKING));
-            gameState.addComponent(walker, footprintComp);
-            gameState.addComponent(walker, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(walker, pos, footprintComp);
+            linearState.entityManager().addComponent(walker, pos);
+            linearState.entityManager().addComponent(walker, TraversalComponent.of(TraversalMode.WALKING));
+            linearState.entityManager().addComponent(walker, footprintComp);
+            linearState.entityManager().addComponent(walker, new ColliderComponent(true));
 
-            gameState.addComponent(walker, new MoveIntentComponent(1, 0, 10L));
+            linearState.entityManager().addComponent(walker, new MoveIntentComponent(1, 0, 10L));
 
-            openMovementSystem.update(gameState, 10L);
+            openMovementSystem.update(linearState, 10L);
 
-            PositionComponent resultPos = gameState.getComponent(walker, PositionComponent.class).orElseThrow();
+            PositionComponent resultPos = linearState.entityManager().getComponent(walker, PositionComponent.class).orElseThrow();
             assertEquals(1, resultPos.getX());
             assertEquals(0, resultPos.getY());
         }
@@ -459,17 +454,16 @@ public class MovementSystemTest {
         void blockedByStaticOrDynamicCollider() {
             EntityId mover = createWalkingEntity(0, 0);
 
-            EntityId obstacle = gameState.createEntity();
+            EntityId obstacle = gameState.entityManager().createEntity();
             PositionComponent obsPos = new PositionComponent(LEVEL_ID, 1, 0);
-            gameState.addComponent(obstacle, obsPos);
-            gameState.addComponent(obstacle, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(obstacle, obsPos, null);
+            gameState.entityManager().addComponent(obstacle, obsPos);
+            gameState.entityManager().addComponent(obstacle, new ColliderComponent(true));
 
-            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(mover, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(mover, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -479,16 +473,15 @@ public class MovementSystemTest {
         void allowsSteppingOnNonColliderEntity() {
             EntityId mover = createWalkingEntity(0, 0);
 
-            EntityId item = gameState.createEntity();
+            EntityId item = gameState.entityManager().createEntity();
             PositionComponent itemPos = new PositionComponent(LEVEL_ID, 1, 0);
-            gameState.addComponent(item, itemPos);
-            gameState.getSpatialIndex().updateEntity(item, itemPos, null);
+            gameState.entityManager().addComponent(item, itemPos);
 
-            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(mover, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(mover, PositionComponent.class).orElseThrow();
             assertEquals(1, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -498,17 +491,16 @@ public class MovementSystemTest {
         void nonColliderMoverStillRespectsObstacleColliders() {
             EntityId mover = createWalkingEntity(0, 0);
 
-            EntityId rock = gameState.createEntity();
+            EntityId rock = gameState.entityManager().createEntity();
             PositionComponent rockPos = new PositionComponent(LEVEL_ID, 1, 0);
-            gameState.addComponent(rock, rockPos);
-            gameState.addComponent(rock, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(rock, rockPos, null);
+            gameState.entityManager().addComponent(rock, rockPos);
+            gameState.entityManager().addComponent(rock, new ColliderComponent(true));
 
-            gameState.addComponent(mover, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(mover, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            PositionComponent pos = gameState.entityManager().getComponent(mover, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -526,32 +518,30 @@ public class MovementSystemTest {
                     grassId, grassId
             };
             World flatWorld = createCustomWorld("flat_level", 2, 2, allGrass);
+            GameState flatState = new GameState(new EntityManager(), new SpatialIndex(), flatWorld);
             MovementRuleService localRuleService = new MovementRuleService(flatWorld);
             MovementSystem testSystem = new MovementSystem(localRuleService, BASE_COOLDOWN);
 
-            EntityId mover = gameState.createEntity();
+            EntityId mover = flatState.entityManager().createEntity();
             PositionComponent moverPos = new PositionComponent("flat_level", 0, 0);
-            gameState.addComponent(mover, moverPos);
-            gameState.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
-            gameState.getSpatialIndex().updateEntity(mover, moverPos, null);
+            flatState.entityManager().addComponent(mover, moverPos);
+            flatState.entityManager().addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
 
-            EntityId blockerA = gameState.createEntity();
+            EntityId blockerA = flatState.entityManager().createEntity();
             PositionComponent posA = new PositionComponent("flat_level", 1, 0);
-            gameState.addComponent(blockerA, posA);
-            gameState.addComponent(blockerA, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(blockerA, posA, null);
+            flatState.entityManager().addComponent(blockerA, posA);
+            flatState.entityManager().addComponent(blockerA, new ColliderComponent(true));
 
-            EntityId blockerB = gameState.createEntity();
+            EntityId blockerB = flatState.entityManager().createEntity();
             PositionComponent posB = new PositionComponent("flat_level", 0, 1);
-            gameState.addComponent(blockerB, posB);
-            gameState.addComponent(blockerB, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(blockerB, posB, null);
+            flatState.entityManager().addComponent(blockerB, posB);
+            flatState.entityManager().addComponent(blockerB, new ColliderComponent(true));
 
-            gameState.addComponent(mover, new MoveIntentComponent(1, 1, 10L));
+            flatState.entityManager().addComponent(mover, new MoveIntentComponent(1, 1, 10L));
 
-            testSystem.update(gameState, 10L);
+            testSystem.update(flatState, 10L);
 
-            PositionComponent pos = gameState.getComponent(mover, PositionComponent.class).orElseThrow();
+            PositionComponent pos = flatState.entityManager().getComponent(mover, PositionComponent.class).orElseThrow();
             assertEquals(0, pos.getX());
             assertEquals(0, pos.getY());
         }
@@ -564,17 +554,16 @@ public class MovementSystemTest {
         @Test
         @DisplayName("Entity with NOCLIP bypasses impassable static terrain (walls)")
         void noClipBypassesImpassableTerrain() {
-            EntityId cheater = gameState.createEntity();
+            EntityId cheater = gameState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent(LEVEL_ID, 1, 0);
-            gameState.addComponent(cheater, pos);
-            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
-            gameState.getSpatialIndex().updateEntity(cheater, pos, null);
+            gameState.entityManager().addComponent(cheater, pos);
+            gameState.entityManager().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
 
-            gameState.addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent result = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            PositionComponent result = gameState.entityManager().getComponent(cheater, PositionComponent.class).orElseThrow();
             assertEquals(2, result.getX());
             assertEquals(0, result.getY());
         }
@@ -582,23 +571,21 @@ public class MovementSystemTest {
         @Test
         @DisplayName("Entity with NOCLIP bypasses dynamic entity colliders")
         void noClipBypassesEntityColliders() {
-            EntityId cheater = gameState.createEntity();
+            EntityId cheater = gameState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent(LEVEL_ID, 0, 0);
-            gameState.addComponent(cheater, pos);
-            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
-            gameState.getSpatialIndex().updateEntity(cheater, pos, null);
+            gameState.entityManager().addComponent(cheater, pos);
+            gameState.entityManager().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
 
-            EntityId rock = gameState.createEntity();
+            EntityId rock = gameState.entityManager().createEntity();
             PositionComponent rockPos = new PositionComponent(LEVEL_ID, 1, 0);
-            gameState.addComponent(rock, rockPos);
-            gameState.addComponent(rock, new ColliderComponent(true));
-            gameState.getSpatialIndex().updateEntity(rock, rockPos, null);
+            gameState.entityManager().addComponent(rock, rockPos);
+            gameState.entityManager().addComponent(rock, new ColliderComponent(true));
 
-            gameState.addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
+            gameState.entityManager().addComponent(cheater, new MoveIntentComponent(1, 0, 10L));
 
             movementSystem.update(gameState, 10L);
 
-            PositionComponent result = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            PositionComponent result = gameState.entityManager().getComponent(cheater, PositionComponent.class).orElseThrow();
             assertEquals(1, result.getX());
             assertEquals(0, result.getY());
         }
@@ -611,20 +598,20 @@ public class MovementSystemTest {
                     wallId, grassId
             };
             World slitWorld = createCustomWorld("slit_level_noclip", 2, 2, slitTiles);
+            GameState slitState = new GameState(new EntityManager(), new SpatialIndex(), slitWorld);
             MovementRuleService localRuleService = new MovementRuleService(slitWorld);
             MovementSystem slitSystem = new MovementSystem(localRuleService, BASE_COOLDOWN);
 
-            EntityId cheater = gameState.createEntity();
+            EntityId cheater = slitState.entityManager().createEntity();
             PositionComponent pos = new PositionComponent("slit_level_noclip", 0, 0);
-            gameState.addComponent(cheater, pos);
-            gameState.addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
-            gameState.getSpatialIndex().updateEntity(cheater, pos, null);
+            slitState.entityManager().addComponent(cheater, pos);
+            slitState.entityManager().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
 
-            gameState.addComponent(cheater, new MoveIntentComponent(1, 1, 10L));
+            slitState.entityManager().addComponent(cheater, new MoveIntentComponent(1, 1, 10L));
 
-            slitSystem.update(gameState, 10L);
+            slitSystem.update(slitState, 10L);
 
-            PositionComponent result = gameState.getComponent(cheater, PositionComponent.class).orElseThrow();
+            PositionComponent result = slitState.entityManager().getComponent(cheater, PositionComponent.class).orElseThrow();
             assertEquals(1, result.getX());
             assertEquals(1, result.getY());
         }

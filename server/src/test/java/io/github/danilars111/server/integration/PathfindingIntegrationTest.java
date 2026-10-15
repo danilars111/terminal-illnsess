@@ -11,9 +11,11 @@ import io.github.danilars111.server.domain.component.movement.PathFollowComponen
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
 import io.github.danilars111.server.domain.data.DefinitionRepository;
+import io.github.danilars111.server.domain.ecs.EntityManager;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
 import io.github.danilars111.server.domain.service.indices.TilePalette;
@@ -58,6 +60,7 @@ public class PathfindingIntegrationTest {
     private GameState gameState;
     private StepCostCalculator costCalculator;
     private MovementRuleService movementRuleService;
+    private StepCostModifierIndex modifierIndex;
 
     private final TileDefinition grass = new TileDefinition(
             "grass",
@@ -68,9 +71,6 @@ public class PathfindingIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        engine = new GameEngine();
-        gameState = engine.getGameState();
-
         DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
         tileRepo.replaceAll(Map.of(grass.id(), grass));
 
@@ -86,8 +86,12 @@ public class PathfindingIntegrationTest {
         LevelGrid grid = new LevelGrid(LEVEL_ID, WORLD_SIZE, WORLD_SIZE, tiles);
         world.registerLevel(grid);
 
+        gameState = new GameState(new EntityManager(), new SpatialIndex(), world);
+        engine = new GameEngine(gameState);
+
         movementRuleService = new MovementRuleService(world);
-        costCalculator = new StandardStepCostCalculator(gameState, movementRuleService);
+        modifierIndex = new StepCostModifierIndex();
+        costCalculator = new StandardStepCostCalculator(gameState, movementRuleService, modifierIndex);
 
         pathValidator = new DefaultPathValidator(costCalculator);
         pathfinder = new FastestPathAStarPathfinder(world, costCalculator);
@@ -98,11 +102,10 @@ public class PathfindingIntegrationTest {
     }
 
     private EntityId spawnNpc(TileCoord start) {
-        EntityId npc = gameState.createEntity();
+        EntityId npc = gameState.entityManager().createEntity();
         PositionComponent pos = new PositionComponent(LEVEL_ID, start);
-        gameState.addComponent(npc, pos);
-        gameState.addComponent(npc, TraversalComponent.of(TraversalMode.WALKING));
-        gameState.getSpatialIndex().updateEntity(npc, pos, null);
+        gameState.entityManager().addComponent(npc, pos);
+        gameState.entityManager().addComponent(npc, TraversalComponent.of(TraversalMode.WALKING));
         return npc;
     }
 
@@ -118,23 +121,23 @@ public class PathfindingIntegrationTest {
                 List.of(0L, 1000L, 1000L),
                 1
         );
-        gameState.addComponent(npc, follow);
+        gameState.entityManager().addComponent(npc, follow);
 
         // Tick 1: Pathfollower issues intent to (6, 5), MovementSystem executes it
         engine.tick();
-        assertEquals(new TileCoord(6, 5), gameState.getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
+        assertEquals(new TileCoord(6, 5), gameState.entityManager().getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
 
         // Tick 2: On cooldown; CooldownSystem decrements cooldown, entity stays put
         engine.tick();
-        assertEquals(new TileCoord(6, 5), gameState.getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
+        assertEquals(new TileCoord(6, 5), gameState.entityManager().getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
 
         // Tick 3: Cooldown expires; Pathfollower moves to (7, 5)
         engine.tick();
-        assertEquals(goal, gameState.getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
+        assertEquals(goal, gameState.entityManager().getComponent(npc, PositionComponent.class).orElseThrow().getTileCoord());
 
         // Tick 4: Pathfollower sees goal arrived and tears down component
         engine.tick();
-        assertTrue(gameState.getComponent(npc, PathFollowComponent.class).isEmpty(),
+        assertTrue(gameState.entityManager().getComponent(npc, PathFollowComponent.class).isEmpty(),
                 "PathFollowComponent should be cleaned up on completion");
     }
 
@@ -146,25 +149,24 @@ public class PathfindingIntegrationTest {
         TileCoord goal = new TileCoord(7, 5);
         EntityId npc = spawnNpc(start);
 
-        gameState.addComponent(npc, new PathFollowComponent(
+        gameState.entityManager().addComponent(npc, new PathFollowComponent(
                 List.of(start, directStep, goal),
                 List.of(0L, 1000L, 1000L),
                 1
         ));
 
         // Spawn a solid dynamic obstacle at (6, 5)
-        EntityId rock = gameState.createEntity();
+        EntityId rock = gameState.entityManager().createEntity();
         PositionComponent rockPos = new PositionComponent(LEVEL_ID, directStep);
-        gameState.addComponent(rock, rockPos);
-        gameState.addComponent(rock, new ColliderComponent());
-        gameState.getSpatialIndex().updateEntity(rock, rockPos, null);
+        gameState.entityManager().addComponent(rock, rockPos);
+        gameState.entityManager().addComponent(rock, new ColliderComponent());
 
         // Tick 1: Lookahead detects blocked node, triggers repath detour, and takes step
         engine.tick();
 
-        PositionComponent currentPos = gameState.getComponent(npc, PositionComponent.class).orElseThrow();
+        PositionComponent currentPos = gameState.entityManager().getComponent(npc, PositionComponent.class).orElseThrow();
         assertTrue(currentPos.getX() != 6 || currentPos.getY() != 5, "NPC must not step into the solid rock");
-        assertTrue(gameState.getComponent(npc, PathFollowComponent.class).isPresent(), "Path should still be active");
+        assertTrue(gameState.entityManager().getComponent(npc, PathFollowComponent.class).isPresent(), "Path should still be active");
     }
 
     @Test
@@ -178,7 +180,6 @@ public class PathfindingIntegrationTest {
         Path directPath = extractSuccessPath(directResult);
         assertEquals(4, directPath.waypoints().size(), "Baseline path should be direct straight line");
 
-        StepCostModifierIndex modifierIndex = gameState.getStepCostModifierIndex();
         modifierIndex.register(new StepCostModifierDefinition(
                 "swamp_penalty",
                 "Swamp Penalty",
@@ -188,15 +189,16 @@ public class PathfindingIntegrationTest {
 
         StepCostCalculator modifiedCalculator = new StandardStepCostCalculator(
                 gameState,
-                movementRuleService
+                movementRuleService,
+                modifierIndex
         ) {
             @Override
             public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {
                 long base = super.calculateStepCost(entityId, from, to);
                 if (base == EngineTime.INFINITE) return EngineTime.INFINITE;
 
-                var modComp = gameState.getComponent(entityId, PathfindingModifierComponent.class);
-                if (modComp.isPresent() && modComp.get().getActiveModifiers().contains("swamp_penalty")) {
+                var modComp = gameState.entityManager().getComponent(entityId, PathfindingModifierComponent.class);
+                if (modComp.isPresent() && modComp.get().activeModifiers().containsKey("swamp_penalty")) {
                     if ((to.getX() == 6 || to.getX() == 7) && Math.abs(to.getY() - 5) <= 1) {
                         return base + 50000L;
                     }
@@ -207,7 +209,7 @@ public class PathfindingIntegrationTest {
 
         FastestPathAStarPathfinder penalizedPathfinder = new FastestPathAStarPathfinder(world, modifiedCalculator);
 
-        gameState.addComponent(npc, PathfindingModifierComponent.of("swamp_penalty"));
+        gameState.entityManager().addComponent(npc, PathfindingModifierComponent.of("swamp_penalty"));
 
         PathResult detourResult = penalizedPathfinder.findPath(gameState, new PathfindingRequest(npc, start, goal));
         Path detourPath = extractSuccessPath(detourResult);
@@ -229,7 +231,6 @@ public class PathfindingIntegrationTest {
         EntityId braveNpc = spawnNpc(start);
         EntityId cautiousNpc = spawnNpc(start);
 
-        StepCostModifierIndex modifierIndex = gameState.getStepCostModifierIndex();
         modifierIndex.register(new StepCostModifierDefinition(
                 "hazard_avoidance",
                 "Hazard Avoidance",
@@ -239,15 +240,16 @@ public class PathfindingIntegrationTest {
 
         StepCostCalculator dynamicCalc = new StandardStepCostCalculator(
                 gameState,
-                movementRuleService
+                movementRuleService,
+                modifierIndex
         ) {
             @Override
             public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {
                 long base = super.calculateStepCost(entityId, from, to);
                 if (base == EngineTime.INFINITE) return EngineTime.INFINITE;
 
-                var modComp = gameState.getComponent(entityId, PathfindingModifierComponent.class);
-                if (modComp.isPresent() && modComp.get().getActiveModifiers().contains("hazard_avoidance")) {
+                var modComp = gameState.entityManager().getComponent(entityId, PathfindingModifierComponent.class);
+                if (modComp.isPresent() && modComp.get().activeModifiers().containsKey("hazard_avoidance")) {
                     Map<String, Object> effective = modifierIndex.resolveEffectiveParams(
                             "hazard_avoidance",
                             modComp.get().getOverrides("hazard_avoidance")
@@ -263,11 +265,11 @@ public class PathfindingIntegrationTest {
 
         FastestPathAStarPathfinder pf = new FastestPathAStarPathfinder(world, dynamicCalc);
 
-        gameState.addComponent(braveNpc, new PathfindingModifierComponent(Map.of(
+        gameState.entityManager().addComponent(braveNpc, new PathfindingModifierComponent(Map.of(
                 "hazard_avoidance", Map.of("penalty", 0L)
         )));
 
-        gameState.addComponent(cautiousNpc, new PathfindingModifierComponent(Map.of(
+        gameState.entityManager().addComponent(cautiousNpc, new PathfindingModifierComponent(Map.of(
                 "hazard_avoidance", Map.of("penalty", 80000L)
         )));
 
@@ -295,20 +297,17 @@ public class PathfindingIntegrationTest {
         EntityId largeBoss = spawnNpc(start);
 
         FootprintComponent bossFootprint = FootprintComponent.rectangle(2, 2);
-        gameState.addComponent(largeBoss, bossFootprint);
-        gameState.getSpatialIndex().updateEntity(largeBoss, new PositionComponent(LEVEL_ID, start), bossFootprint);
+        gameState.entityManager().addComponent(largeBoss, bossFootprint);
 
-        EntityId topWall = gameState.createEntity();
+        EntityId topWall = gameState.entityManager().createEntity();
         PositionComponent topWallPos = new PositionComponent(LEVEL_ID, 6, 4);
-        gameState.addComponent(topWall, topWallPos);
-        gameState.addComponent(topWall, new ColliderComponent());
-        gameState.getSpatialIndex().updateEntity(topWall, topWallPos, null);
+        gameState.entityManager().addComponent(topWall, topWallPos);
+        gameState.entityManager().addComponent(topWall, new ColliderComponent());
 
-        EntityId bottomWall = gameState.createEntity();
+        EntityId bottomWall = gameState.entityManager().createEntity();
         PositionComponent bottomWallPos = new PositionComponent(LEVEL_ID, 6, 6);
-        gameState.addComponent(bottomWall, bottomWallPos);
-        gameState.addComponent(bottomWall, new ColliderComponent());
-        gameState.getSpatialIndex().updateEntity(bottomWall, bottomWallPos, null);
+        gameState.entityManager().addComponent(bottomWall, bottomWallPos);
+        gameState.entityManager().addComponent(bottomWall, new ColliderComponent());
 
         PathResult smallResult = pathfinder.findPath(gameState, new PathfindingRequest(smallNpc, start, goal));
         assertInstanceOf(PathResult.Success.class, smallResult);
