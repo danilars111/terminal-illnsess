@@ -2,7 +2,7 @@ package io.github.danilars111.contracts.command;
 
 import io.github.danilars111.contracts.command.interfaces.GameCommand;
 
-public record MoveCommand(long entityId, int deltaX, int deltaY) implements GameCommand {
+public record MoveCommand(int entityId, int deltaX, int deltaY) implements GameCommand {
 
     public MoveCommand {
         if(entityId < 0) {

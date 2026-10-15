@@ -11,9 +11,9 @@ public class MoveCommandTest {
     @Test
     @DisplayName("MoveCommand stores target entity ID and movement delta")
     void storesDetlaAndTarget() {
-        MoveCommand command = new MoveCommand(1L, 1, 0);
+        MoveCommand command = new MoveCommand(1, 1, 0);
 
-        assertEquals(1L, command.entityId());
+        assertEquals(1, command.entityId());
         assertEquals(1, command.deltaX());
         assertEquals(0, command.deltaY());
         assertInstanceOf(GameCommand.class, command);
@@ -22,12 +22,12 @@ public class MoveCommandTest {
     @Test
     @DisplayName("MoveCommand rejects non-positive EntityId")
     void rejectInvalidEntityId() {
-        assertThrows(IllegalArgumentException.class, () -> new MoveCommand(-5L, 1, 0));
+        assertThrows(IllegalArgumentException.class, () -> new MoveCommand(-5, 1, 0));
     }
 
     @Test
     @DisplayName("MoveCommand reject zero-delta movement")
     void rejectZeroDeltaMovement() {
-        assertThrows(IllegalArgumentException.class, () -> new MoveCommand(1L, 0, 0));
+        assertThrows(IllegalArgumentException.class, () -> new MoveCommand(1, 0, 0));
     }
 }
