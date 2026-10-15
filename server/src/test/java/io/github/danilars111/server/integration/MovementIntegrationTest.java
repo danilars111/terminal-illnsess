@@ -8,15 +8,18 @@ import io.github.danilars111.server.domain.component.movement.ColliderComponent;
 import io.github.danilars111.server.domain.component.movement.MoveIntentComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
+import io.github.danilars111.server.domain.data.DefinitionRepository;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.engine.CommandDispatcher;
 import io.github.danilars111.server.domain.engine.GameEngine;
+import io.github.danilars111.server.domain.service.indices.SpatialIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
+import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.system.CooldownSystem;
 import io.github.danilars111.server.domain.system.MovementSystem;
-import io.github.danilars111.server.domain.world.GameWorld;
-import io.github.danilars111.server.domain.service.indices.SpatialIndex;
+import io.github.danilars111.server.domain.world.LevelGrid;
+import io.github.danilars111.server.domain.world.World;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +27,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
@@ -33,18 +37,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MovementIntegrationTest {
+
+    private static final String LEVEL_ID = "overworld";
+    private static final int WORLD_SIZE = 20;
+    private static final int BASE_COOLDOWN = 4;
+
     private GameEngine engine;
     private MovementSystem movementSystem;
     private CooldownSystem cooldownSystem;
-    private TileIndex  tileIndex;
-
-    private static final int WORLD_SIZE = 20;
-    private static final int BASE_COOLDOWN = 4;
+    private TileIndex tileIndex;
+    private TilePalette tilePalette;
+    private World world;
 
     private final TileDefinition grass = new TileDefinition(
             "grass",
             "Grass",
-            Set.of(TraversalMode.WALKING, TraversalMode.FLYING)
+            Set.of(TraversalMode.WALKING, TraversalMode.FLYING),
+            Set.of()
     );
 
     @BeforeAll
@@ -61,13 +70,24 @@ public class MovementIntegrationTest {
 
     @BeforeEach
     void setUp() {
-
         engine = new GameEngine();
 
-        tileIndex = engine.getGameState().getTileIndex();
-        tileIndex.register(grass);
+        DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
+        tileRepo.replaceAll(Map.of(grass.id(), grass));
 
-        GameWorld world = new GameWorld(WORLD_SIZE, WORLD_SIZE, grass.id(), tileIndex);
+        tileIndex = new TileIndex();
+        short grassId = tileIndex.register(grass.id());
+
+        tilePalette = new TilePalette();
+        tilePalette.rebuild(tileIndex, tileRepo);
+
+        world = new World(tilePalette, tileIndex);
+
+        short[] tiles = new short[WORLD_SIZE * WORLD_SIZE];
+        Arrays.fill(tiles, grassId);
+        LevelGrid grid = new LevelGrid(LEVEL_ID, WORLD_SIZE, WORLD_SIZE, tiles);
+        world.registerLevel(grid);
+
         MovementRuleService movementRuleService = new MovementRuleService(world);
 
         cooldownSystem = new CooldownSystem();
@@ -76,11 +96,9 @@ public class MovementIntegrationTest {
         engine.registerSystem(cooldownSystem);
         engine.registerSystem(movementSystem);
 
-        // 3. Dispatch MoveCommand by attaching MoveIntentComponent to GameState
         CommandDispatcher dispatcher = new CommandDispatcher();
         dispatcher.registerHandler(MoveCommand.class, moveCmd -> {
             EntityId targetId = new EntityId(moveCmd.entityId());
-            // Attach transient intent with current tick (or 0L if tick not exposed on dispatcher)
             engine.getGameState().addComponent(
                     targetId,
                     new MoveIntentComponent(moveCmd.deltaX(), moveCmd.deltaY(), engine.getCurrentTick())
@@ -92,8 +110,10 @@ public class MovementIntegrationTest {
 
     private EntityId spawnPlayer(int x, int y) {
         EntityId entity = engine.getGameState().createEntity();
-        engine.getGameState().addComponent(entity, new PositionComponent(x, y));
+        PositionComponent pos = new PositionComponent(LEVEL_ID, x, y);
+        engine.getGameState().addComponent(entity, pos);
         engine.getGameState().addComponent(entity, TraversalComponent.of(TraversalMode.WALKING));
+        engine.getGameState().getSpatialIndex().updateEntity(entity, pos, null);
         return entity;
     }
 
@@ -103,8 +123,6 @@ public class MovementIntegrationTest {
         EntityId entity = spawnPlayer(10, 10);
 
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, -1));
-
-        // Advance engine by one tick
         engine.tick();
 
         PositionComponent position = engine.getGameState()
@@ -120,7 +138,7 @@ public class MovementIntegrationTest {
     void enforcesAndRecoversCooldownOverMultipleTicks() {
         EntityId entity = spawnPlayer(10, 10);
 
-        // Tick 1: Initial step (dx=1 dy=0) -> Orhogonal movement incures BASE_COOLDOWN cooldown
+        // Tick 1: Initial step (dx=1 dy=0) -> Orthogonal movement incurs BASE_COOLDOWN cooldown
         engine.enqueueCommand(new MoveCommand(entity.value(), 1, 0));
         engine.tick();
 
@@ -138,7 +156,6 @@ public class MovementIntegrationTest {
                 .getComponent(entity, PositionComponent.class)
                 .orElseThrow();
 
-        // Has not changed position due to cooldown
         assertEquals(11, posBlocked.getX());
         assertEquals(10, posBlocked.getY());
 
@@ -161,10 +178,10 @@ public class MovementIntegrationTest {
     @DisplayName("End-to-end: Multi-tile entity moves and synchronizes its full footprint in SpatialIndex")
     void multiTileEntityMovesAndUpdatesSpatialIndex() {
         EntityId boss = spawnPlayer(5, 5);
-        // Attach 2x2 footprint to the entity
-        engine.getGameState().addComponent(boss, FootprintComponent.rectangle(2, 2));
+        FootprintComponent footprintComp = FootprintComponent.rectangle(2, 2);
+        engine.getGameState().addComponent(boss, footprintComp);
+        engine.getGameState().getSpatialIndex().updateEntity(boss, new PositionComponent(LEVEL_ID, 5, 5), footprintComp);
 
-        // Advance move (dx=1, dy=0) -> new anchor (6, 5)
         engine.enqueueCommand(new MoveCommand(boss.value(), 1, 0));
         engine.tick();
 
@@ -174,7 +191,6 @@ public class MovementIntegrationTest {
         assertEquals(6, pos.getX());
         assertEquals(5, pos.getY());
 
-        // Verify SpatialIndex automatically synchronized all 4 occupied cells
         SpatialIndex spatialIndex = engine.getGameState().getSpatialIndex();
         Set<TileCoord> occupied = spatialIndex.getFootprintOf(boss);
         assertEquals(4, occupied.size());
@@ -183,9 +199,8 @@ public class MovementIntegrationTest {
         assertTrue(occupied.contains(new TileCoord(6, 6)));
         assertTrue(occupied.contains(new TileCoord(7, 6)));
 
-        // Verify old vacated column at x=5 is cleared
-        assertTrue(spatialIndex.getEntitiesAt(5, 5).isEmpty());
-        assertTrue(spatialIndex.getEntitiesAt(5, 6).isEmpty());
+        assertTrue(spatialIndex.getEntitiesAt(LEVEL_ID, 5, 5).isEmpty());
+        assertTrue(spatialIndex.getEntitiesAt(LEVEL_ID, 5, 6).isEmpty());
     }
 
     @Test
@@ -193,12 +208,12 @@ public class MovementIntegrationTest {
     void moveCommandBlockedByDynamicColliderEntity() {
         EntityId mover = spawnPlayer(10, 10);
 
-        // Spawn a solid rock/obstacle at destination (11, 10)
         EntityId obstacle = engine.getGameState().createEntity();
-        engine.getGameState().addComponent(obstacle, new PositionComponent(11, 10));
+        PositionComponent obsPos = new PositionComponent(LEVEL_ID, 11, 10);
+        engine.getGameState().addComponent(obstacle, obsPos);
         engine.getGameState().addComponent(obstacle, new ColliderComponent());
+        engine.getGameState().getSpatialIndex().updateEntity(obstacle, obsPos, null);
 
-        // Attempt move into obstacle
         engine.enqueueCommand(new MoveCommand(mover.value(), 1, 0));
         engine.tick();
 
@@ -216,8 +231,10 @@ public class MovementIntegrationTest {
         EntityId mover = spawnPlayer(10, 10);
 
         EntityId obstacle = engine.getGameState().createEntity();
-        engine.getGameState().addComponent(obstacle, new PositionComponent(11, 10));
+        PositionComponent obsPos = new PositionComponent(LEVEL_ID, 11, 10);
+        engine.getGameState().addComponent(obstacle, obsPos);
         engine.getGameState().addComponent(obstacle, new ColliderComponent());
+        engine.getGameState().getSpatialIndex().updateEntity(obstacle, obsPos, null);
 
         // Tick 1: Move blocked
         engine.enqueueCommand(new MoveCommand(mover.value(), 1, 0));
@@ -242,13 +259,16 @@ public class MovementIntegrationTest {
     @DisplayName("End-to-end: Player with NOCLIP bypasses dynamic colliders via MoveCommand")
     void noClipPlayerPhasesThroughDynamicColliders() {
         EntityId cheater = engine.getGameState().createEntity();
-        engine.getGameState().addComponent(cheater, new PositionComponent(10, 10));
+        PositionComponent cheaterPos = new PositionComponent(LEVEL_ID, 10, 10);
+        engine.getGameState().addComponent(cheater, cheaterPos);
         engine.getGameState().addComponent(cheater, TraversalComponent.of(TraversalMode.NOCLIP));
+        engine.getGameState().getSpatialIndex().updateEntity(cheater, cheaterPos, null);
 
-        // Solid obstacle blocking (11, 10)
         EntityId solidWall = engine.getGameState().createEntity();
-        engine.getGameState().addComponent(solidWall, new PositionComponent(11, 10));
+        PositionComponent wallPos = new PositionComponent(LEVEL_ID, 11, 10);
+        engine.getGameState().addComponent(solidWall, wallPos);
         engine.getGameState().addComponent(solidWall, new ColliderComponent());
+        engine.getGameState().getSpatialIndex().updateEntity(solidWall, wallPos, null);
 
         engine.enqueueCommand(new MoveCommand(cheater.value(), 1, 0));
         engine.tick();
@@ -264,27 +284,25 @@ public class MovementIntegrationTest {
     @Test
     @DisplayName("End-to-end: Two entities attempting to step into the same tile resolve deterministically")
     void competingEntitiesResolveMovementDeterministically() {
-        // Player 1 at (9, 10) and Player 2 at (11, 10), both solid colliders
         EntityId p1 = spawnPlayer(9, 10);
         engine.getGameState().addComponent(p1, new ColliderComponent());
+        engine.getGameState().getSpatialIndex().updateEntity(p1, new PositionComponent(LEVEL_ID, 9, 10), null);
 
         EntityId p2 = spawnPlayer(11, 10);
         engine.getGameState().addComponent(p2, new ColliderComponent());
+        engine.getGameState().getSpatialIndex().updateEntity(p2, new PositionComponent(LEVEL_ID, 11, 10), null);
 
-        // Both players issue MoveCommands to step into contested tile (10, 10) on the same tick
-        engine.enqueueCommand(new MoveCommand(p1.value(), 1, 0));  // (9,10) -> (10,10)
-        engine.enqueueCommand(new MoveCommand(p2.value(), -1, 0)); // (11,10) -> (10,10)
+        engine.enqueueCommand(new MoveCommand(p1.value(), 1, 0));
+        engine.enqueueCommand(new MoveCommand(p2.value(), -1, 0));
 
         engine.tick();
 
         PositionComponent p1Pos = engine.getGameState().getComponent(p1, PositionComponent.class).orElseThrow();
         PositionComponent p2Pos = engine.getGameState().getComponent(p2, PositionComponent.class).orElseThrow();
 
-        // P1 has lower EntityId value, winning the tie-breaker and claiming (10, 10)
         assertEquals(10, p1Pos.getX(), "Lower EntityId wins contested tile");
         assertEquals(10, p1Pos.getY());
 
-        // P2 arrives second within the same tick, detects P1 at (10, 10) via SpatialIndex, and is blocked
         assertEquals(11, p2Pos.getX(), "Competing entity is blocked by winner's collider");
         assertEquals(10, p2Pos.getY());
     }

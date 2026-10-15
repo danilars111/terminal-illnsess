@@ -8,25 +8,29 @@ import io.github.danilars111.server.domain.component.FootprintComponent;
 import io.github.danilars111.server.domain.component.ai.PathfindingModifierComponent;
 import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.component.movement.TraversalComponent;
+import io.github.danilars111.server.domain.data.DefinitionRepository;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
+import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.time.EngineTime;
-import io.github.danilars111.server.domain.world.GameWorld;
+import io.github.danilars111.server.domain.world.LevelGrid;
+import io.github.danilars111.server.domain.world.World;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class StandardStepCostCalculatorTest {
+
+    private static final String LEVEL_ID = "level_main";
 
     private GameState gameState;
     private EntityId mover;
@@ -37,21 +41,32 @@ class StandardStepCostCalculatorTest {
     private final TileDefinition walkableTile = new TileDefinition(
             "walkable",
             "Walkable",
-            Set.of(TraversalMode.WALKING)
+            Set.of(TraversalMode.WALKING),
+            Set.of()
     );
 
     @BeforeEach
     void setUp() {
         gameState = new GameState();
         mover = gameState.createEntity();
-        gameState.addComponent(mover, new PositionComponent(5, 5));
+        gameState.addComponent(mover, new PositionComponent(LEVEL_ID, 5, 5));
         gameState.addComponent(mover, TraversalComponent.of(TraversalMode.WALKING));
         gameState.addComponent(mover, FootprintComponent.singleTile());
 
-        TileIndex tileIndex = gameState.getTileIndex();
-        tileIndex.register(walkableTile);
+        DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
+        tileRepo.replaceAll(Map.of(walkableTile.id(), walkableTile));
 
-        GameWorld world = new GameWorld(10, 10, walkableTile.id(), tileIndex);
+        TileIndex tileIndex = new TileIndex();
+        short walkableId = tileIndex.register(walkableTile.id());
+
+        TilePalette tilePalette = new TilePalette();
+        tilePalette.rebuild(tileIndex, tileRepo);
+
+        World world = new World(tilePalette, tileIndex);
+        short[] tiles = new short[10 * 10];
+        java.util.Arrays.fill(tiles, walkableId);
+        LevelGrid grid = new LevelGrid(LEVEL_ID, 10, 10, tiles);
+        world.registerLevel(grid);
 
         movementRuleService = new MovementRuleService(world, MovementRuleService.DiagonalMode.PERMISSIVE);
         modifierIndex = gameState.getStepCostModifierIndex();
@@ -126,7 +141,6 @@ class StandardStepCostCalculatorTest {
         );
         modifierIndex.register(def);
 
-        // Instance overrides only the radius, keeps default penalty
         Map<String, Object> overrides = Map.of("radius", 5, "extraTag", "CUSTOM");
         Map<String, Object> effective = modifierIndex.resolveEffectiveParams("hazard_avoidance", overrides);
 

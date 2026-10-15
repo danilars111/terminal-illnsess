@@ -8,7 +8,6 @@ import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.movement.MovementRuleService;
 import io.github.danilars111.server.domain.system.interfaces.GameSystem;
 import io.github.danilars111.server.domain.time.EngineTime;
-import io.github.danilars111.server.domain.world.GameWorld;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.lang.System.Logger;
@@ -87,10 +86,10 @@ public class MovementSystem implements GameSystem {
         TileCoord fromCoord = currentPos.getTileCoord();
         TileCoord toCoord = new TileCoord(currentPos.getX() + dx, currentPos.getY() + dy);
 
-        // 2. Delegate step bounds, diagonal modes, pinch, terrain, and colliders
-        if (!movementRuleService.canTraverseStep(gameState, entityId, fromCoord, toCoord)) {
-            LOGGER.log(Level.DEBUG, "Entity {0} move from {1} to {2} rejected by movement rules",
-                    entityId.value(), fromCoord, toCoord);
+        // 2. Delegate step bounds, diagonal modes, pinch, terrain, and colliders on the active level
+        if (!movementRuleService.canTraverseStep(gameState, entityId, currentPos.levelId(), fromCoord, toCoord)) {
+            LOGGER.log(Level.DEBUG, "Entity {0} move from {1} to {2} on level {3} rejected by movement rules",
+                    entityId.value(), fromCoord, toCoord, currentPos.levelId());
             return;
         }
 
@@ -107,7 +106,7 @@ public class MovementSystem implements GameSystem {
             gameState.addComponent(entityId, cooldown.withCooldown(COOLDOWN_KEY, appliedCooldown));
         }
 
-        LOGGER.log(Level.DEBUG, "Entity {0} moved from {1} to {2} on tick {3}",
-                entityId.value(), fromCoord, toCoord, tick);
+        LOGGER.log(Level.DEBUG, "Entity {0} moved from {1} to {2} on level {3} at tick {4}",
+                entityId.value(), fromCoord, toCoord, currentPos.levelId(), tick);
     }
 }

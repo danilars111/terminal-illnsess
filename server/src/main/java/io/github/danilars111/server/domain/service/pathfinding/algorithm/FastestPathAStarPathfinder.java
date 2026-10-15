@@ -1,6 +1,7 @@
 package io.github.danilars111.server.domain.service.pathfinding.algorithm;
 
 import io.github.danilars111.server.domain.component.FootprintComponent;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
@@ -9,7 +10,7 @@ import io.github.danilars111.server.domain.service.pathfinding.interfaces.StepCo
 import io.github.danilars111.server.domain.service.pathfinding.records.Path;
 import io.github.danilars111.server.domain.service.pathfinding.records.PathfindingRequest;
 import io.github.danilars111.server.domain.time.EngineTime;
-import io.github.danilars111.server.domain.world.GameWorld;
+import io.github.danilars111.server.domain.world.World;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.PriorityQueue;
 
@@ -26,25 +28,25 @@ public class FastestPathAStarPathfinder implements Pathfinder {
 
     private static final int MAX_EXPANSIONS_DEFAULT = 5_000;
 
-    private final GameWorld world;
+    private final World world;
     private final boolean allowDiagonal;
     private final StepCostCalculator costCalculator;
     private final int maxExpansions;
 
     public FastestPathAStarPathfinder(
-            GameWorld gameWorld,
+            World world,
             boolean allowDiagonal,
             StepCostCalculator stepCostCalculator,
             int maxExpansions
     ) {
-        this.world = gameWorld;
+        this.world = Objects.requireNonNull(world, "World cannot be null");
         this.allowDiagonal = allowDiagonal;
-        this.costCalculator = stepCostCalculator;
+        this.costCalculator = Objects.requireNonNull(stepCostCalculator, "StepCostCalculator cannot be null");
         this.maxExpansions = maxExpansions > 0 ? maxExpansions : MAX_EXPANSIONS_DEFAULT;
     }
 
     public FastestPathAStarPathfinder(
-            GameWorld world,
+            World world,
             boolean allowDiagonal,
             StepCostCalculator stepCostCalculator
     ) {
@@ -52,7 +54,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
     }
 
     public FastestPathAStarPathfinder(
-            GameWorld world,
+            World world,
             StepCostCalculator stepCostCalculator
     ) {
         this(world, true, stepCostCalculator, MAX_EXPANSIONS_DEFAULT);
@@ -67,9 +69,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
             if (gCmp != 0) { return gCmp; }
             int yCmp = Integer.compare(this.coord.getY(), o.coord.getY());
             if (yCmp != 0) { return yCmp; }
-            int xCmp = Integer.compare(this.coord.getX(), o.coord.getX());
-            return xCmp;
-
+            return Integer.compare(this.coord.getX(), o.coord.getX());
         }
     }
 
@@ -77,8 +77,12 @@ public class FastestPathAStarPathfinder implements Pathfinder {
     public PathResult findPath(GameState state, PathfindingRequest req) {
         TileCoord start = req.start();
         TileCoord goal = req.goal();
-        FootprintComponent footprint = FootprintComponent.getFootprintFrom(state, req.entityId());
         EntityId entityId = req.entityId();
+
+        // Resolve level ID either from request (if supported) or entity's PositionComponent
+        String levelId = state.getComponent(entityId, PositionComponent.class)
+                .map(PositionComponent::levelId)
+                .orElseThrow(() -> new IllegalArgumentException("Entity " + entityId + " has no PositionComponent to resolve level"));
 
         if (start.equals(goal)) {
             return new PathResult.Success(Path.atDestination(start));
@@ -98,19 +102,19 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         long minRemainingHeuristic = initialH;
         int expansions = 0;
 
-        while(!openSet.isEmpty()) {
-            if(++expansions > maxExpansions) {
+        while (!openSet.isEmpty()) {
+            if (++expansions > maxExpansions) {
                 Path partial = reconstructPath(cameFrom, stepsCostTaken, closestNode, gScores.getOrDefault(closestNode, 0L));
                 return new PathResult.Failure(PathResult.FailureReason.BUDGET_EXHAUSTED, Optional.of(partial), closestNode);
             }
             Node current = openSet.poll();
 
-            if(current.coord.equals(goal)) {
+            if (current.coord.equals(goal)) {
                 Path fullPath = reconstructPath(cameFrom, stepsCostTaken, current.coord, current.gCost);
                 return new PathResult.Success(fullPath);
             }
 
-            if(current.gCost > gScores.getOrDefault(current.coord, Long.MAX_VALUE)) {
+            if (current.gCost > gScores.getOrDefault(current.coord, Long.MAX_VALUE)) {
                 continue;
             }
 
@@ -121,7 +125,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
                 closestNode = current.coord;
             }
 
-            expandNeighbors(entityId, current, goal, footprint, openSet, gScores, cameFrom, stepsCostTaken);
+            expandNeighbors(entityId, levelId, current, goal, openSet, gScores, cameFrom, stepsCostTaken);
         }
 
         // Search space exhausted without touching the destination
@@ -141,7 +145,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         int dx = Math.abs(start.getX() - goal.getX());
         int dy = Math.abs(start.getY() - goal.getY());
 
-        if(allowDiagonal) {
+        if (allowDiagonal) {
             int minD = Math.min(dx, dy);
             int maxD = Math.max(dx, dy);
             return (minD * (long) EngineTime.SQRT_2) + ((long) (maxD - minD) * EngineTime.TICK_SCALE);
@@ -158,7 +162,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
         List<Long> costs = new ArrayList<>();
 
         TileCoord curr = end;
-        while(curr != null) {
+        while (curr != null) {
             waypoints.add(curr);
             costs.add(stepCostsTaken.getOrDefault(curr, 0L));
             curr = cameFrom.get(curr);
@@ -170,9 +174,9 @@ public class FastestPathAStarPathfinder implements Pathfinder {
 
     private void expandNeighbors(
             EntityId entityId,
+            String levelId,
             Node current,
             TileCoord goal,
-            FootprintComponent footprint,
             PriorityQueue<Node> openSet,
             Map<TileCoord, Long> gScores,
             Map<TileCoord, TileCoord> cameFrom,
@@ -182,12 +186,12 @@ public class FastestPathAStarPathfinder implements Pathfinder {
                 ? concatenate(CARDINAL_DIRS, DIAGONAL_DIRS)
                 : CARDINAL_DIRS;
 
-        for(int[] dir : directions) {
+        for (int[] dir : directions) {
             int nx = current.coord.getX() + dir[0];
             int ny = current.coord.getY() + dir[1];
 
-            // World Bounds Check: Discard off-grid coordinates immediately
-            if(!world.isWithinBounds(nx, ny)) {
+            // World Bounds Check: Discard off-grid coordinates for the active level
+            if (!world.isWithinBounds(levelId, nx, ny)) {
                 continue;
             }
 
@@ -199,7 +203,7 @@ public class FastestPathAStarPathfinder implements Pathfinder {
             }
 
             long tentativeG = current.gCost + stepCost;
-            if(tentativeG < gScores.getOrDefault(next, Long.MAX_VALUE)) {
+            if (tentativeG < gScores.getOrDefault(next, Long.MAX_VALUE)) {
                 gScores.put(next, tentativeG);
                 cameFrom.put(next, current.coord);
                 stepCostsTaken.put(next, stepCost);
