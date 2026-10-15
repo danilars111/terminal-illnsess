@@ -2,6 +2,7 @@ package io.github.danilars111.server.domain.service.pathfinding.cost;
 
 import io.github.danilars111.contracts.definition.ai.pathfinding.StepCostModifierDefinition;
 import io.github.danilars111.server.domain.component.ai.PathfindingModifierComponent;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.indices.StepCostModifierIndex;
@@ -28,11 +29,18 @@ public class StandardStepCostCalculator implements StepCostCalculator {
         this.modifierIndex = gameState.getStepCostModifierIndex();
     }
 
-
     @Override
     public long calculateStepCost(EntityId entityId, TileCoord from, TileCoord to) {
-        // 1. Mandatory physics & movement rules check (terrain, bounds, diagonal pinch, dynamic colliders)
-        if (!movementRuleService.canTraverseStep(gameState, entityId, from, to)) {
+        String levelId = gameState.getComponent(entityId, PositionComponent.class)
+                .map(PositionComponent::levelId)
+                .orElse(null);
+
+        if (levelId == null) {
+            return EngineTime.INFINITE;
+        }
+
+        // 1. Mandatory physics and movement rules check on the active level
+        if (!movementRuleService.canTraverseStep(gameState, entityId, levelId, from, to)) {
             return EngineTime.INFINITE;
         }
 
@@ -59,7 +67,6 @@ public class StandardStepCostCalculator implements StepCostCalculator {
 
             Map<String, Object> effectiveParams = modifierIndex.resolveEffectiveParams(modifierId, overrides);
 
-            // Hook for future strategy execution once StepCostModifierStrategy has values:
             long additionalCost = evaluateStrategy(def, effectiveParams, entityId, from, to);
             if (additionalCost == EngineTime.INFINITE) {
                 return EngineTime.INFINITE;
@@ -77,7 +84,6 @@ public class StandardStepCostCalculator implements StepCostCalculator {
             TileCoord from,
             TileCoord to
     ) {
-        // Empty placeholder until StepCostModifierStrategy enum variants are introduced
         return 0L;
     }
 }

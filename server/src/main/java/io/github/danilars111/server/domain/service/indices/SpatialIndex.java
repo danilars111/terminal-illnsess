@@ -8,91 +8,115 @@ import io.github.danilars111.server.domain.world.records.TileCoord;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-
 
 public class SpatialIndex {
 
-    // One tile can hold multiple entities
-    private final Map<TileCoord, Set<EntityId>> tileToEntities = new HashMap<>();
-    private final Map<EntityId, Set<TileCoord>> entityToTiles = new HashMap<>();
+    public record LevelTileCoord(String levelId, TileCoord coord) {
+        public LevelTileCoord {
+            Objects.requireNonNull(levelId, "levelId cannot be null");
+            Objects.requireNonNull(coord, "coord cannot be null");
+        }
 
-    public void updateEntity(EntityId entityId, PositionComponent pos) {
-        updateEntity(entityId, pos, null);
+        public LevelTileCoord(String levelId, int x, int y) {
+            this(levelId, new TileCoord(x, y));
+        }
     }
 
-    /**
-     * Updates an entity's occupied footprint in the index.
-     * If footprint is null, defaults to a single tile at (pos.x(), pos.y()).
-     */
-    public void updateEntity(EntityId entityId, PositionComponent pos, FootprintComponent footprint) {
-       remove(entityId);
+    private final Map<LevelTileCoord, Set<EntityId>> tileToEntities = new HashMap<>();
+    private final Map<EntityId, Set<LevelTileCoord>> entityToTiles = new HashMap<>();
 
-       List<TileCoord> occupiedCoords = footprint != null
-               ? footprint.getOccupiedCoords(pos.getX(), pos.getY())
-               : List.of(new TileCoord(pos.getX(), pos.getY()));
+    public void updateEntity(EntityId entityId, PositionComponent position, FootprintComponent footprint) {
+        Objects.requireNonNull(entityId, "entityId cannot be null");
+        Objects.requireNonNull(position, "position cannot be null");
 
-       Set<TileCoord> tiles = new LinkedHashSet<>(occupiedCoords);
-       entityToTiles.put(entityId, tiles);
-       for (TileCoord tile : tiles) {
-           tileToEntities.computeIfAbsent(tile, k -> new LinkedHashSet<>()).add(entityId);
-       }
-   }
+        remove(entityId);
 
-    /**
-     * Completely removes an entity from all tiles it occupies.
-     */
+        String levelId = position.levelId();
+        TileCoord anchor = position.getTileCoord();
+        List<TileCoord> occupiedOffsets = (footprint != null)
+                ? footprint.getOccupiedCoords(anchor)
+                : List.of(anchor);
+
+        Set<LevelTileCoord> occupiedLevelCoords = new HashSet<>();
+
+        for (TileCoord coord : occupiedOffsets) {
+            LevelTileCoord levelCoord = new LevelTileCoord(levelId, coord);
+            occupiedLevelCoords.add(levelCoord);
+            tileToEntities.computeIfAbsent(levelCoord, k -> new HashSet<>()).add(entityId);
+        }
+
+        entityToTiles.put(entityId, occupiedLevelCoords);
+    }
+
     public void remove(EntityId entityId) {
-        Set<TileCoord> currentTiles = entityToTiles.remove(entityId);
-        if(currentTiles != null) {
-            for(TileCoord tile : currentTiles) {
-                Set<EntityId> occupants = tileToEntities.get(tile);
-                if(occupants != null) {
-                    occupants.remove(entityId);
-                    if(occupants.isEmpty()) {
-                        tileToEntities.remove(tile);
-                    }
+        Objects.requireNonNull(entityId, "entityId cannot be null");
+        Set<LevelTileCoord> oldCoords = entityToTiles.remove(entityId);
+        if (oldCoords == null) {
+            return;
+        }
+
+        for (LevelTileCoord levelCoord : oldCoords) {
+            Set<EntityId> occupants = tileToEntities.get(levelCoord);
+            if (occupants != null) {
+                occupants.remove(entityId);
+                if (occupants.isEmpty()) {
+                    tileToEntities.remove(levelCoord);
                 }
             }
         }
     }
 
-    public Set<EntityId> getEntitiesAt(int x, int y) {
-        return getEntitiesAt(new TileCoord(x, y));
-    }
-    public Set<EntityId> getEntitiesAt(TileCoord coord) {
-        return Collections.unmodifiableSet(tileToEntities.getOrDefault(coord, Set.of()));
+    public Set<EntityId> getEntitiesAt(String levelId, int x, int y) {
+        return getEntitiesAt(levelId, new TileCoord(x, y));
     }
 
-    /**
-     * Returns all world tiles currently covered by this entity.
-     */
+    public Set<EntityId> getEntitiesAt(String levelId, TileCoord coord) {
+        Set<EntityId> occupants = tileToEntities.get(new LevelTileCoord(levelId, coord));
+        if (occupants == null) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(occupants);
+    }
+
     public Set<TileCoord> getFootprintOf(EntityId entityId) {
-        return Collections.unmodifiableSet(
-                entityToTiles.getOrDefault(entityId, Set.of())
-        );
+        Set<LevelTileCoord> levelCoords = entityToTiles.get(entityId);
+        if (levelCoords == null) {
+            return Collections.emptySet();
+        }
+
+        Set<TileCoord> coords = new HashSet<>(levelCoords.size());
+        for (LevelTileCoord ltc : levelCoords) {
+            coords.add(ltc.coord());
+        }
+        return Collections.unmodifiableSet(coords);
     }
 
-    /**
-     * Radial Euclidean query: returns unique entities overlapping any tile inside the radius.
-     */
-    public List<EntityId> getEntitiesInRadius(int centerX, int centerY, int radius) {
-        Set<EntityId> uniqueEntities = new LinkedHashSet<>();
-        int radiusSquared = radius * radius;
+    public List<EntityId> getEntitiesInRadius(String levelId, int centerX, int centerY, int radius) {
+        Objects.requireNonNull(levelId, "levelId cannot be null");
+        if (radius < 0) {
+            return Collections.emptyList();
+        }
 
-        for (int dy = -radius; dy <= radius; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                if (dx * dx + dy * dy <= radiusSquared) {
-                    Set<EntityId> onTile = tileToEntities.get(new TileCoord(centerX + dx, centerY + dy));
-                    if (onTile != null) {
-                        uniqueEntities.addAll(onTile);
+        Set<EntityId> uniqueEntities = new HashSet<>();
+        int radiusSq = radius * radius;
+
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                if (dx * dx + dy * dy <= radiusSq) {
+                    LevelTileCoord query = new LevelTileCoord(levelId, centerX + dx, centerY + dy);
+                    Set<EntityId> occupants = tileToEntities.get(query);
+                    if (occupants != null) {
+                        uniqueEntities.addAll(occupants);
                     }
                 }
             }
         }
+
         return new ArrayList<>(uniqueEntities);
     }
 

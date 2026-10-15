@@ -15,8 +15,8 @@ public class TilePalette {
 
         TileDefinition[] newArray = new TileDefinition[tileIndex.size()];
         for (short i = 0; i < tileIndex.size(); i++) {
-    //        String key = tileIndex.getStringId(i);
-    //        newArray[i] = repo.getRequired(key);
+            String key = tileIndex.getStringId(i);
+            newArray[i] = repo.getRequired(key);
         }
         this.definitions = newArray;
     }

@@ -22,7 +22,7 @@ public class DefinitionRepository<T extends Definition> {
     public T getRequired(String id) {
         T def = definitions.get(id);
         if (def == null) {
-            throw new IllegalArgumentException("Uknown definition ID: " + id);
+            throw new IllegalArgumentException("Unknown definition ID: " + id);
         }
         return def;
     }

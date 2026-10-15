@@ -2,17 +2,20 @@ package io.github.danilars111.server.domain.service.pathfinding.algorithm;
 
 import io.github.danilars111.contracts.definition.world.TileDefinition;
 import io.github.danilars111.contracts.definition.world.enums.TraversalMode;
-import io.github.danilars111.server.domain.component.FootprintComponent;
+import io.github.danilars111.server.domain.component.movement.PositionComponent;
+import io.github.danilars111.server.domain.data.DefinitionRepository;
 import io.github.danilars111.server.domain.ecs.GameState;
 import io.github.danilars111.server.domain.ecs.records.EntityId;
 import io.github.danilars111.server.domain.service.indices.TileIndex;
+import io.github.danilars111.server.domain.service.indices.TilePalette;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.PathResult;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.Pathfinder;
 import io.github.danilars111.server.domain.service.pathfinding.interfaces.StepCostCalculator;
 import io.github.danilars111.server.domain.service.pathfinding.records.Path;
 import io.github.danilars111.server.domain.service.pathfinding.records.PathfindingRequest;
 import io.github.danilars111.server.domain.time.EngineTime;
-import io.github.danilars111.server.domain.world.GameWorld;
+import io.github.danilars111.server.domain.world.LevelGrid;
+import io.github.danilars111.server.domain.world.World;
 import io.github.danilars111.server.domain.world.records.TileCoord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,27 +23,50 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class FastestPathAStarPathfinderTest {
 
+    private static final String DEFAULT_LEVEL_ID = "level_main";
+
     private GameState gameState;
     private TileDefinition defaultTile;
     private EntityId mover;
     private TileIndex tileIndex;
+    private TilePalette tilePalette;
+    private short defaultTileId;
 
     @BeforeEach
     void setUp() {
         gameState = new GameState();
         mover = gameState.createEntity();
-        defaultTile = new TileDefinition("grass", "Grass", Set.of(TraversalMode.WALKING));
-        tileIndex = gameState.getTileIndex();
+        defaultTile = new TileDefinition("grass", "Grass", Set.of(TraversalMode.WALKING), Set.of());
+
+        DefinitionRepository<TileDefinition> tileRepo = new DefinitionRepository<>();
+        tileRepo.replaceAll(Map.of(defaultTile.id(), defaultTile));
+
+        tileIndex = new TileIndex();
+        defaultTileId = tileIndex.register(defaultTile.id());
+
+        tilePalette = new TilePalette();
+        tilePalette.rebuild(tileIndex, tileRepo);
+
+        // Pathfinder resolves the entity's level via PositionComponent
+        gameState.addComponent(mover, new PositionComponent(DEFAULT_LEVEL_ID, 0, 0));
     }
 
-    private GameWorld createUniformWorld(int width, int height) {
-        return new GameWorld(width, height, defaultTile.id(), tileIndex);
+    private World createUniformWorld(int width, int height) {
+        World world = new World(tilePalette, tileIndex);
+        short[] tiles = new short[width * height];
+        for (int i = 0; i < tiles.length; i++) {
+            tiles[i] = defaultTileId;
+        }
+        LevelGrid grid = new LevelGrid(DEFAULT_LEVEL_ID, width, height, tiles);
+        world.registerLevel(grid);
+        return world;
     }
 
     private PathfindingRequest createRequest(TileCoord start, TileCoord goal) {
@@ -52,17 +78,17 @@ class FastestPathAStarPathfinderTest {
     }
 
     @Nested
-    @DisplayName("Trivial & Boundry Cases")
+    @DisplayName("Trivial & Boundary Cases")
     class BoundaryCases {
 
         @Test
         @DisplayName("Returns single-step zero-cost success when start equals goal")
         void returnsSingleStepZeroCostWhenStartEqualsGoal() {
-            GameWorld gameWorld = createUniformWorld(5, 5);
+            World world = createUniformWorld(5, 5);
             StepCostCalculator costCalc = (entityId, from, to) -> EngineTime.ticksToUnits(4);
-            Pathfinder pathfinder = new FastestPathAStarPathfinder(gameWorld, false, costCalc);
+            Pathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
 
-            TileCoord start = new TileCoord(2,2);
+            TileCoord start = new TileCoord(2, 2);
             TileCoord goal = start;
             PathfindingRequest request = createRequest(start, goal);
 
@@ -79,8 +105,8 @@ class FastestPathAStarPathfinderTest {
         @Test
         @DisplayName("Finds simple straight-line path in uniform terrain")
         void findsStraightLinePath() {
-            GameWorld world = createUniformWorld(5, 1);
-            long stepCost = EngineTime.ticksToUnits(4); // 4000 units per step
+            World world = createUniformWorld(5, 1);
+            long stepCost = EngineTime.ticksToUnits(4);
             StepCostCalculator costCalc = (entityId, from, to) -> stepCost;
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
 
@@ -101,9 +127,10 @@ class FastestPathAStarPathfinderTest {
             );
             assertEquals(expectedWaypoints, path.waypoints());
             assertEquals(3 * stepCost, path.totalCostUnits());
-            assertEquals(12L, path.totalDurationTicksCeil()); // 3 steps * 4 ticks = 12 ticks
+            assertEquals(12L, path.totalDurationTicksCeil());
         }
     }
+
     @Nested
     @DisplayName("Cost Optimization & Detours")
     class CostOptimization {
@@ -111,15 +138,7 @@ class FastestPathAStarPathfinderTest {
         @Test
         @DisplayName("Prefers longer road route over short direct swamp route when road is faster")
         void prefersFasterDetourAroundSlowTerrain() {
-            // 3x3 Grid:
-            // y=2: (0,2)[road]   - (1,2)[road]  - (2,2)[road]
-            // y=1: (0,1)[grass]  - (1,1)[swamp] - (2,1)[grass]
-            // y=0: (0,0)[grass]  - (1,0)[grass] - (2,0)[grass]
-            //
-            // From (0,1) to (2,1):
-            // Direct: (0,1) -> (1,1)[swamp: 30 ticks] -> (2,1)[grass: 4 ticks] = 34 ticks
-            // Road:   (0,1) -> (0,2)[1 tick] -> (1,2)[1 tick] -> (2,2)[1 tick] -> (2,1)[1 tick] = 4 ticks
-            GameWorld world = createUniformWorld(3, 3);
+            World world = createUniformWorld(3, 3);
 
             TileCoord swamp = new TileCoord(1, 1);
             StepCostCalculator costCalc = (entityId, from, to) -> {
@@ -127,9 +146,9 @@ class FastestPathAStarPathfinderTest {
                     return EngineTime.ticksToUnits(30);
                 }
                 if (to.getY() == 2) {
-                    return EngineTime.ticksToUnits(1); // Fast road along top row
+                    return EngineTime.ticksToUnits(1);
                 }
-                return EngineTime.ticksToUnits(4); // Default terrain
+                return EngineTime.ticksToUnits(4);
             };
 
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc);
@@ -147,8 +166,7 @@ class FastestPathAStarPathfinderTest {
         @Test
         @DisplayName("Routes around impassable infinite-cost obstacle")
         void routesAroundImpassableWall() {
-            // 3x3 Grid with wall at (1,1)
-            GameWorld world = createUniformWorld(3, 3);
+            World world = createUniformWorld(3, 3);
             TileCoord wall = new TileCoord(1, 1);
 
             StepCostCalculator costCalc = (entityId, from, to) -> {
@@ -173,14 +191,14 @@ class FastestPathAStarPathfinderTest {
         @Test
         @DisplayName("Uses diagonal movement when allowed and costs match SQRT_2 scale")
         void supportsDiagonalMovement() {
-            GameWorld world = createUniformWorld(3, 3);
-            long baseCost = EngineTime.ticksToUnits(1); // 1000 units
+            World world = createUniformWorld(3, 3);
+            long baseCost = EngineTime.ticksToUnits(1);
 
             StepCostCalculator costCalc = (entityId, from, to) -> {
                 int dx = Math.abs(from.getX() - to.getX());
                 int dy = Math.abs(from.getY() - to.getY());
                 if (dx != 0 && dy != 0) {
-                    return (long) EngineTime.SQRT_2; // 1414 units
+                    return (long) EngineTime.SQRT_2;
                 }
                 return baseCost;
             };
@@ -202,15 +220,15 @@ class FastestPathAStarPathfinderTest {
             assertEquals(2L * EngineTime.SQRT_2, path.totalCostUnits());
         }
     }
+
     @Nested
     @DisplayName("Unreachable & Budget Exhaustion Cases")
     class UnreachableCases {
+
         @Test
         @DisplayName("Returns Failure(UNREACHABLE) with closest reachable coordinate when target is enclosed")
         void returnsFailureWithClosestCoordWhenTargetEnclosed() {
-            // 5x1 Grid:
-            // (0,0)[start] -> (1,0) -> (2,0)[wall] -> (3,0)[wall] -> (4,0)[isolated goal]
-            GameWorld world = createUniformWorld(5, 1);
+            World world = createUniformWorld(5, 1);
             TileCoord wall1 = new TileCoord(2, 0);
             TileCoord wall2 = new TileCoord(3, 0);
 
@@ -236,14 +254,13 @@ class FastestPathAStarPathfinderTest {
             Path partialPath = failure.partialPathToClosest().get();
             assertEquals(List.of(new TileCoord(0, 0), new TileCoord(1, 0)), partialPath.waypoints());
         }
+
         @Test
         @DisplayName("Aborts with BUDGET_EXHAUSTED when search exceeds max expansion limit")
         void abortsWithBudgetExhaustedWhenBudgetExceeded() {
-            // 20x20 open world
-            GameWorld world = createUniformWorld(20, 20);
+            World world = createUniformWorld(20, 20);
             StepCostCalculator costCalc = (entityId, from, to) -> EngineTime.ticksToUnits(1);
 
-            // Intentionally set a tiny budget of 5 expansions
             int maxExpansions = 5;
             FastestPathAStarPathfinder pathfinder = new FastestPathAStarPathfinder(world, false, costCalc, maxExpansions);
 
