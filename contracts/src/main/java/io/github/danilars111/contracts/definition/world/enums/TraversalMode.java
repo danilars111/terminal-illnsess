@@ -4,5 +4,6 @@ public enum TraversalMode {
     WALKING,
     SWIMMING,
     FLYING,
+    GHOSTING,
     NOCLIP // Debug / cheat mode: Bypasses terrain and colliders
 }

@@ -32,9 +32,6 @@ public class GameEngine {
     private Consumer<GameCommand> commandHandler = _ -> {};
     private GameStatePublisher publisher = _ -> {};
 
-
-
-
     public GameEngine() {
         this(new GameState());
     }
